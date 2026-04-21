@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "strict": false,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": [
+    "shared/protocol/intents.ts",
+    "shared/protocol/actions.ts",
+    "shared/mechanics/mechanics.types.ts",
+    "browser/page-adapter/ObservationAdapter.ts",
+    "browser/page-adapter/IntentAdapter.ts",
+    "browser/page-adapter/RuntimeHooks.ts",
+    "browser/page-adapter/DebugHUD.ts",
+    "browser/page-adapter/bootstrap.ts",
+    "bot/policies/baseline.ts",
+    "scripts/extract-mechanics.ts"
+  ]
+}

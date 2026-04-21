@@ -1,0 +1,13 @@
+{
+  "name": "openfront",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "extract-mechanics": "node scripts/extract-mechanics.ts",
+    "eval:local": "node server/eval/run-local-eval.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
+  }
+}

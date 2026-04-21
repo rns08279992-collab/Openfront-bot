@@ -1,0 +1,1089 @@
+{
+  "pinnedCommit": "52033597efb09de6c8d724f6e2784c3c9e8a7511",
+  "generatedFrom": {
+    "research": [
+      "research/pinned-commit.txt",
+      "research/mechanics-scan.md",
+      "research/source-index.md",
+      "research/repo-structure.md",
+      "research/architecture-notes.md"
+    ],
+    "primaryInputs": [
+      ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      ".tmp/OpenFrontIO-upstream/src/core/Schemas.ts",
+      ".tmp/OpenFrontIO-upstream/src/core/game/Game.ts",
+      ".tmp/OpenFrontIO-upstream/src/core/game/GameImpl.ts",
+      ".tmp/OpenFrontIO-upstream/src/core/execution/WinCheckExecution.ts",
+      ".tmp/OpenFrontIO-upstream/src/server/MapPlaylist.ts",
+      ".tmp/OpenFrontIO-upstream/src/server/GameServer.ts"
+    ],
+    "supportingInputs": [
+      ".tmp/OpenFrontIO-upstream/src/core/configuration/Config.ts",
+      ".tmp/OpenFrontIO-upstream/src/core/configuration/ConfigLoader.ts",
+      ".tmp/OpenFrontIO-upstream/src/core/GameRunner.ts"
+    ]
+  },
+  "schema": {
+    "gameConfigFields": [
+      {
+        "name": "gameMap",
+        "schema": "z.enum(GameMapType)",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "difficulty",
+        "schema": "z.enum(Difficulty)",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "donateGold",
+        "schema": "z.boolean()",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "donateTroops",
+        "schema": "z.boolean()",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "gameType",
+        "schema": "z.enum(GameType)",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "gameMode",
+        "schema": "z.enum(GameMode)",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "rankedType",
+        "schema": "z.enum(RankedType).optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "gameMapSize",
+        "schema": "z.enum(GameMapSize)",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "publicGameModifiers",
+        "schema": "z.object({ isCompact: z.boolean().optional(), isRandomSpawn: z.boolean().optional(), isCrowded: z.boolean().optional(), isHardNations: z.boolean().optional(), startingGold: z.number().int().min(0).optional(), goldMultiplier: z.number().min(0.1).max(1000).optional(), isAlliancesDisabled: z.boolean().optional(), isPortsDisabled: z.boolean().optional(), isNukesDisabled: z.boolean().optional(), isSAMsDisabled: z.boolean().optional(), isPeaceTime: z.boolean().optional(), isWaterNukes: z.boolean().optional(), }).optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "nations",
+        "schema": "z.number().int().min(1).max(400).or(z.enum([\"default\", \"disabled\"]))",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "bots",
+        "schema": "z.number().int().min(0).max(400)",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "infiniteGold",
+        "schema": "z.boolean()",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "infiniteTroops",
+        "schema": "z.boolean()",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "instantBuild",
+        "schema": "z.boolean()",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "disableNavMesh",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "disableAlliances",
+        "schema": "z.boolean().nullable().optional()",
+        "optional": true,
+        "nullable": true
+      },
+      {
+        "name": "waterNukes",
+        "schema": "z.boolean().nullable().optional()",
+        "optional": true,
+        "nullable": true
+      },
+      {
+        "name": "randomSpawn",
+        "schema": "z.boolean()",
+        "optional": false,
+        "nullable": false
+      },
+      {
+        "name": "maxPlayers",
+        "schema": "z.number().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "maxTimerValue",
+        "schema": "z.number().int().min(1).max(120).nullable().optional()",
+        "optional": true,
+        "nullable": true
+      },
+      {
+        "name": "spawnImmunityDuration",
+        "schema": "z.number().int().min(0).nullable().optional()",
+        "optional": true,
+        "nullable": true
+      },
+      {
+        "name": "disabledUnits",
+        "schema": "z.enum(UnitType).array().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "playerTeams",
+        "schema": "TeamCountConfigSchema.optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "goldMultiplier",
+        "schema": "z.number().min(0.1).max(1000).nullable().optional()",
+        "optional": true,
+        "nullable": true
+      },
+      {
+        "name": "startingGold",
+        "schema": "z.number().int().min(0).max(1000000000).nullable().optional()",
+        "optional": true,
+        "nullable": true
+      },
+      {
+        "name": "hostCheats",
+        "schema": "z.object({ infiniteGold: z.boolean().optional(), infiniteTroops: z.boolean().optional(), goldMultiplier: z.number().min(0.1).max(1000).nullable().optional(), startingGold: z.number().int().min(0).max(1000000000).nullable().optional(), }).optional()",
+        "optional": true,
+        "nullable": false
+      }
+    ],
+    "teamCountModes": [
+      "Duos",
+      "Trios",
+      "Quads",
+      "Humans Vs Nations"
+    ],
+    "publicModifierFields": [
+      {
+        "name": "isCompact",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "isRandomSpawn",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "isCrowded",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "isHardNations",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "startingGold",
+        "schema": "z.number().int().min(0).optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "goldMultiplier",
+        "schema": "z.number().min(0.1).max(1000).optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "isAlliancesDisabled",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "isPortsDisabled",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "isNukesDisabled",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "isSAMsDisabled",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "isPeaceTime",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      },
+      {
+        "name": "isWaterNukes",
+        "schema": "z.boolean().optional()",
+        "optional": true,
+        "nullable": false
+      }
+    ],
+    "updateableLobbyConfigFields": [
+      "gameMap",
+      "gameMapSize",
+      "difficulty",
+      "nations",
+      "bots",
+      "infiniteGold",
+      "donateGold",
+      "infiniteTroops",
+      "donateTroops",
+      "maxTimerValue",
+      "instantBuild",
+      "randomSpawn",
+      "spawnImmunityDuration",
+      "gameMode",
+      "disabledUnits",
+      "playerTeams",
+      "goldMultiplier",
+      "startingGold",
+      "disableAlliances",
+      "waterNukes"
+    ],
+    "enums": {
+      "difficulty": [
+        "Easy",
+        "Medium",
+        "Hard",
+        "Impossible"
+      ],
+      "gameMode": [
+        "Free For All",
+        "Team"
+      ],
+      "gameType": [
+        "Singleplayer",
+        "Public",
+        "Private"
+      ],
+      "gameMapSize": [
+        "Compact",
+        "Normal"
+      ],
+      "playerType": [
+        "BOT",
+        "HUMAN",
+        "NATION"
+      ],
+      "terrainType": [
+        "Plains",
+        "Highland",
+        "Mountain",
+        "Lake",
+        "Ocean"
+      ],
+      "unitType": [
+        "Transport",
+        "Warship",
+        "Shell",
+        "SAMMissile",
+        "Port",
+        "Atom Bomb",
+        "Hydrogen Bomb",
+        "Trade Ship",
+        "Missile Silo",
+        "Defense Post",
+        "SAM Launcher",
+        "City",
+        "MIRV",
+        "MIRV Warhead",
+        "Train",
+        "Factory"
+      ]
+    },
+    "unitGroups": {
+      "nukes": [
+        "AtomBomb",
+        "HydrogenBomb",
+        "MIRVWarhead",
+        "MIRV"
+      ],
+      "structures": [
+        "City",
+        "DefensePost",
+        "SAMLauncher",
+        "MissileSilo",
+        "Port",
+        "Factory"
+      ],
+      "buildMenus": [
+        "City",
+        "DefensePost",
+        "SAMLauncher",
+        "MissileSilo",
+        "Port",
+        "Factory",
+        "AtomBomb",
+        "HydrogenBomb",
+        "MIRV",
+        "Warship"
+      ],
+      "playerBuildable": [
+        "City",
+        "DefensePost",
+        "SAMLauncher",
+        "MissileSilo",
+        "Port",
+        "Factory",
+        "AtomBomb",
+        "HydrogenBomb",
+        "MIRV",
+        "Warship",
+        "TransportShip"
+      ]
+    }
+  },
+  "constants": {
+    "server": {
+      "turnIntervalMs": 100,
+      "gameCreationRateMs": 120000
+    },
+    "spawn": {
+      "defaultSpawnImmunityTicks": 50,
+      "samConstructionTicks": 300,
+      "numSpawnPhaseTurns": {
+        "singleplayer": 100,
+        "randomSpawn": 150,
+        "default": 300
+      },
+      "effectiveSpawnImmunityWindow": {
+        "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/game/GameImpl.ts",
+        "sourceExpression": "numSpawnPhaseTurns() + spawnImmunityDuration() > ticks()"
+      }
+    },
+    "economy": {
+      "cityTroopIncrease": 250000
+    },
+    "timers": {
+      "samCooldown": 120,
+      "siloCooldown": 75,
+      "donateCooldown": 100,
+      "embargoAllCooldown": 100,
+      "deletionMarkDuration": 300,
+      "deleteUnitCooldown": 300,
+      "emojiMessageDuration": 50,
+      "emojiMessageCooldown": 50,
+      "targetDuration": 100,
+      "targetCooldown": 150,
+      "allianceRequestDuration": 200,
+      "allianceRequestCooldown": 300,
+      "allianceDuration": 3000,
+      "temporaryEmbargoDuration": 3000,
+      "allianceExtensionPromptOffset": 300
+    },
+    "ranges": {
+      "defensePostRange": 30,
+      "defensePostDefenseBonus": 5,
+      "defensePostSpeedBonus": 3,
+      "trainStationMinRange": 15,
+      "trainStationMaxRange": 100,
+      "railroadMaxSize": 120,
+      "radiusPortSpawn": 20,
+      "tradeShipShortRangeDebuff": 300,
+      "defaultNukeTargetableRange": 150,
+      "defaultSamRange": 70,
+      "maxSamRange": 150,
+      "structureMinDist": 15,
+      "warshipPatrolRange": 100,
+      "warshipTargettingRange": 130,
+      "defensePostTargettingRange": 75,
+      "minDistanceBetweenPlayers": 30
+    },
+    "thresholds": {
+      "percentageTilesOwnedToWin": {
+        "freeForAll": 80,
+        "team": 95
+      },
+      "boatMaxNumberDefault": 3,
+      "winCheckHardTimeLimitSeconds": 10200,
+      "defenseDebuffMidpoint": 150000,
+      "defenseDebuffDecayRate": "Math.LN2 / 50000"
+    },
+    "traitor": {
+      "defenseDebuff": 0.5,
+      "speedDebuff": 0.8,
+      "durationTicks": 300
+    },
+    "naval": {
+      "warshipShellLifetime": 20,
+      "shellLifetime": 50,
+      "warshipShellAttackRate": 20,
+      "defensePostShellAttackRate": 100,
+      "safeFromPiratesCooldownMax": 20
+    },
+    "nukes": {
+      "magnitudes": {
+        "MIRVWarhead": {
+          "inner": 12,
+          "outer": 18
+        },
+        "AtomBomb": {
+          "inner": 12,
+          "outer": 30
+        },
+        "HydrogenBomb": {
+          "inner": 80,
+          "outer": 100
+        }
+      },
+      "nukeAllianceBreakThreshold": 100,
+      "defaultNukeSpeed": 6,
+      "defaultSamMissileSpeed": 12
+    }
+  },
+  "units": {
+    "TransportShip": {
+      "cost": {
+        "kind": "fixed",
+        "value": "0",
+        "sourceExpression": "() => 0n"
+      }
+    },
+    "Warship": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "(numUnits: number) => Math.min(1_000_000, (numUnits + 1) * 250_000)",
+        "dependsOn": [
+          "unitsOwnedConstructed",
+          "infiniteGoldForHumanLobbyCreator"
+        ],
+        "countsAgainst": [
+          "Warship"
+        ]
+      },
+      "maxHealth": 1000
+    },
+    "Shell": {
+      "cost": {
+        "kind": "fixed",
+        "value": "0",
+        "sourceExpression": "() => 0n"
+      },
+      "damage": 250
+    },
+    "SAMMissile": {
+      "cost": {
+        "kind": "fixed",
+        "value": "0",
+        "sourceExpression": "() => 0n"
+      }
+    },
+    "Port": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "(numUnits: number) => Math.min(1_000_000, Math.pow(2, numUnits) * 125_000)",
+        "dependsOn": [
+          "unitsOwnedConstructed",
+          "infiniteGoldForHumanLobbyCreator"
+        ],
+        "countsAgainst": [
+          "Port",
+          "Factory"
+        ]
+      },
+      "constructionDuration": {
+        "sourceExpression": "this.instantBuild() ? 0 : 2 * 10",
+        "instantBuildZero": true
+      },
+      "upgradable": true
+    },
+    "AtomBomb": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "() => 750_000",
+        "dependsOn": [
+          "unitsOwnedConstructed",
+          "infiniteGoldForHumanLobbyCreator"
+        ],
+        "countsAgainst": [
+          "AtomBomb"
+        ]
+      }
+    },
+    "HydrogenBomb": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "() => 5_000_000",
+        "dependsOn": [
+          "unitsOwnedConstructed",
+          "infiniteGoldForHumanLobbyCreator"
+        ],
+        "countsAgainst": [
+          "HydrogenBomb"
+        ]
+      }
+    },
+    "TradeShip": {
+      "cost": {
+        "kind": "fixed",
+        "value": "0",
+        "sourceExpression": "() => 0n"
+      }
+    },
+    "MissileSilo": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "() => 1_000_000",
+        "dependsOn": [
+          "unitsOwnedConstructed",
+          "infiniteGoldForHumanLobbyCreator"
+        ],
+        "countsAgainst": [
+          "MissileSilo"
+        ]
+      },
+      "constructionDuration": {
+        "sourceExpression": "this.instantBuild() ? 0 : 10 * 10",
+        "instantBuildZero": true
+      },
+      "upgradable": true
+    },
+    "DefensePost": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "(numUnits: number) => Math.min(250_000, (numUnits + 1) * 50_000)",
+        "dependsOn": [
+          "unitsOwnedConstructed",
+          "infiniteGoldForHumanLobbyCreator"
+        ],
+        "countsAgainst": [
+          "DefensePost"
+        ]
+      },
+      "constructionDuration": {
+        "sourceExpression": "this.instantBuild() ? 0 : 5 * 10",
+        "instantBuildZero": true
+      }
+    },
+    "SAMLauncher": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "(numUnits: number) => Math.min(3_000_000, (numUnits + 1) * 1_500_000)",
+        "dependsOn": [
+          "unitsOwnedConstructed",
+          "infiniteGoldForHumanLobbyCreator"
+        ],
+        "countsAgainst": [
+          "SAMLauncher"
+        ]
+      },
+      "constructionDuration": {
+        "sourceExpression": "this.instantBuild() ? 0 : SAM_CONSTRUCTION_TICKS",
+        "instantBuildZero": true
+      },
+      "upgradable": true
+    },
+    "City": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "(numUnits: number) => Math.min(1_000_000, Math.pow(2, numUnits) * 125_000)",
+        "dependsOn": [
+          "unitsOwnedConstructed",
+          "infiniteGoldForHumanLobbyCreator"
+        ],
+        "countsAgainst": [
+          "City"
+        ]
+      },
+      "constructionDuration": {
+        "sourceExpression": "this.instantBuild() ? 0 : 2 * 10",
+        "instantBuildZero": true
+      },
+      "upgradable": true
+    },
+    "MIRV": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "(game: Game, player: Player) => { if ( player.type() === PlayerType.Human && this.hasInfiniteGoldFor(player) ) { return 0n; } return 25_000_000n + game.stats().numMirvsLaunched() * 15_000_000n; }",
+        "dependsOn": [
+          "numMirvsLaunched",
+          "infiniteGoldForHumanLobbyCreator"
+        ]
+      }
+    },
+    "MIRVWarhead": {
+      "cost": {
+        "kind": "fixed",
+        "value": "0",
+        "sourceExpression": "() => 0n"
+      }
+    },
+    "Train": {
+      "cost": {
+        "kind": "fixed",
+        "value": "0",
+        "sourceExpression": "() => 0n"
+      }
+    },
+    "Factory": {
+      "cost": {
+        "kind": "formula",
+        "sourceExpression": "(numUnits: number) => Math.min(1_000_000, Math.pow(2, numUnits) * 125_000)",
+        "dependsOn": [
+          "unitsOwnedConstructed",
+          "infiniteGoldForHumanLobbyCreator"
+        ],
+        "countsAgainst": [
+          "Factory",
+          "Port"
+        ]
+      },
+      "constructionDuration": {
+        "sourceExpression": "this.instantBuild() ? 0 : 2 * 10",
+        "instantBuildZero": true
+      },
+      "upgradable": true
+    }
+  },
+  "formulas": {
+    "spawnImmunityDuration": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "( this._gameConfig.spawnImmunityDuration ?? DEFAULT_SPAWN_IMMUNITY_TICKS )",
+      "dependsOn": [
+        "gameConfig.spawnImmunityDuration",
+        "DEFAULT_SPAWN_IMMUNITY_TICKS"
+      ]
+    },
+    "goldMultiplier": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "const base = this.goldMultiplier(); const hc = this._gameConfig.hostCheats; if (hc?.goldMultiplier && player.isLobbyCreator()) { return hc.goldMultiplier; } return base;",
+      "dependsOn": [
+        "gameConfig.goldMultiplier",
+        "hostCheats.goldMultiplier",
+        "isLobbyCreator"
+      ]
+    },
+    "startingGold": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "const base = BigInt(this._gameConfig.startingGold ?? 0); const hc = this._gameConfig.hostCheats; if (hc?.startingGold && playerInfo.isLobbyCreator) { return base + BigInt(hc.startingGold); } return base;",
+      "dependsOn": [
+        "gameConfig.startingGold",
+        "hostCheats.startingGold",
+        "isLobbyCreator"
+      ]
+    },
+    "trainSpawnRate": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "(numPlayerFactories + 10) * 15",
+      "dependsOn": [
+        "numPlayerFactories"
+      ]
+    },
+    "trainGold": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "// No penalty for the first 10 cities. citiesVisited = Math.max(0, citiesVisited - 9); let baseGold: number; switch (rel) { case \"ally\": baseGold = 35_000; break; case \"team\": case \"other\": baseGold = 25_000; break; case \"self\": baseGold = 10_000; break; } const distPenalty = citiesVisited * 5_000; const gold = Math.max(5000, baseGold - distPenalty); return toInt(gold * this.goldMultiplierFor(player));",
+      "dependsOn": [
+        "relation",
+        "citiesVisited",
+        "goldMultiplierFor"
+      ]
+    },
+    "tradeShipGold": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "// Sigmoid: concave start, sharp S-curve middle, linear end - heavily punishes trades under range debuff. const debuff = this.tradeShipShortRangeDebuff(); const baseGold = 75_000 / (1 + Math.exp(-0.03 * (dist - debuff))) + 50 * dist; return BigInt(Math.floor(baseGold * this.goldMultiplierFor(player)));",
+      "dependsOn": [
+        "distance",
+        "tradeShipShortRangeDebuff",
+        "goldMultiplierFor"
+      ]
+    },
+    "tradeShipSpawnRate": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "const decayRate = Math.LN2 / 50; // Approaches 0 as numTradeShips increase const baseSpawnRate = 1 - sigmoid(numTradeShips, decayRate, 200); // Pity timer: increases spawn chance after consecutive rejections const rejectionModifier = 1 / (tradeShipSpawnRejections + 1); return Math.floor((100 * rejectionModifier) / baseSpawnRate);",
+      "dependsOn": [
+        "tradeShipSpawnRejections",
+        "numTradeShips"
+      ]
+    },
+    "proximityBonusPortsNb": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "within(totalPorts / 3, 4, totalPorts)",
+      "dependsOn": [
+        "totalPorts"
+      ]
+    },
+    "falloutDefenseModifier": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "5 - falloutRatio * 2",
+      "dependsOn": [
+        "falloutRatio"
+      ]
+    },
+    "startManpower": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "if (playerInfo.playerType === PlayerType.Bot) { return 10_000; } if (playerInfo.playerType === PlayerType.Nation) { switch (this._gameConfig.difficulty) { case Difficulty.Easy: return 12_500; case Difficulty.Medium: return 18_750; case Difficulty.Hard: return 25_000; // Like humans case Difficulty.Impossible: return 31_250; default: assertNever(this._gameConfig.difficulty); } } return this.hasInfiniteTroopsForInfo(playerInfo) ? 1_000_000 : 25_000;",
+      "dependsOn": [
+        "playerType",
+        "difficulty",
+        "hostCheats.infiniteTroops",
+        "isLobbyCreator"
+      ]
+    },
+    "maxTroops": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "const maxTroops = player.type() === PlayerType.Human && this.hasInfiniteTroopsFor(player) ? 1_000_000_000 : 2 * (Math.pow(player.numTilesOwned(), 0.6) * 1000 + 50000) + player .units(UnitType.City) .filter((u) => !u.isUnderConstruction()) .map((city) => city.level()) .reduce((a, b) => a + b, 0) * this.cityTroopIncrease(); if (player.type() === PlayerType.Bot) { return maxTroops / 3; } if (player.type() === PlayerType.Human) { return maxTroops; } switch (this._gameConfig.difficulty) { case Difficulty.Easy: return maxTroops * 0.5; case Difficulty.Medium: return maxTroops * 0.75; case Difficulty.Hard: return maxTroops * 1; // Like humans case Difficulty.Impossible: return maxTroops * 1.25; default: assertNever(this._gameConfig.difficulty); }",
+      "dependsOn": [
+        "playerType",
+        "numTilesOwned",
+        "cityLevels",
+        "difficulty",
+        "hostCheats.infiniteTroops"
+      ]
+    },
+    "troopIncreaseRate": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "const max = this.maxTroops(player); let toAdd = 10 + Math.pow(player.troops(), 0.73) / 4; const ratio = 1 - player.troops() / max; toAdd *= ratio; if (player.type() === PlayerType.Bot) { toAdd *= 0.6; } if (player.type() === PlayerType.Nation) { switch (this._gameConfig.difficulty) { case Difficulty.Easy: toAdd *= 0.9; break; case Difficulty.Medium: toAdd *= 0.95; break; case Difficulty.Hard: toAdd *= 1; // Like humans break; case Difficulty.Impossible: toAdd *= 1.05; break; default: assertNever(this._gameConfig.difficulty); } } return Math.min(player.troops() + toAdd, max) - player.troops();",
+      "dependsOn": [
+        "playerTroops",
+        "maxTroops",
+        "playerType",
+        "difficulty"
+      ]
+    },
+    "goldAdditionRate": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "const multiplier = this.goldMultiplierFor(player); let baseRate: bigint; if (player.type() === PlayerType.Bot) { baseRate = 50n; } else { baseRate = 100n; } return BigInt(Math.floor(Number(baseRate) * multiplier));",
+      "dependsOn": [
+        "playerType",
+        "goldMultiplierFor"
+      ]
+    },
+    "attackLogic": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "let mag = 0; let speed = 0; const type = gm.terrainType(tileToConquer); switch (type) { case TerrainType.Plains: mag = 80; speed = 16.5; break; case TerrainType.Highland: mag = 100; speed = 20; break; case TerrainType.Mountain: mag = 120; speed = 25; break; default: throw new Error(`terrain type ${type} not supported`); } if (defender.isPlayer()) { for (const dp of gm.nearbyUnits( tileToConquer, gm.config().defensePostRange(), UnitType.DefensePost, )) { if (dp.unit.owner() === defender) { mag *= this.defensePostDefenseBonus(); speed *= this.defensePostSpeedBonus(); break; } } } if (gm.hasFallout(tileToConquer)) { const falloutRatio = gm.numTilesWithFallout() / gm.numLandTiles(); mag *= this.falloutDefenseModifier(falloutRatio); speed *= this.falloutDefenseModifier(falloutRatio); } if (attacker.isPlayer() && defender.isPlayer()) { if (defender.isDisconnected() && attacker.isOnSameTeam(defender)) { // No troop loss if defender is disconnected and on same team mag = 0; } if ( attacker.type() === PlayerType.Human && defender.type() === PlayerType.Bot ) { mag *= 0.8; } if ( attacker.type() === PlayerType.Nation && defender.type() === PlayerType.Bot ) { mag *= 0.8; } } if (defender.isPlayer()) { const defenseSig = 1 - sigmoid( defender.numTilesOwned(), DEFENSE_DEBUFF_DECAY_RATE, DEFENSE_DEBUFF_MIDPOINT, ); const largeDefenderSpeedDebuff = 0.7 + 0.3 * defenseSig; const largeDefenderAttackDebuff = 0.7 + 0.3 * defenseSig; let largeAttackBonus = 1; if (attacker.numTilesOwned() > 100_000) { largeAttackBonus = Math.sqrt(100_000 / attacker.numTilesOwned()) ** 0.7; } let largeAttackerSpeedBonus = 1; if (attacker.numTilesOwned() > 100_000) { largeAttackerSpeedBonus = (100_000 / attacker.numTilesOwned()) ** 0.6; } const defenderTroopLoss = defender.troops() / defender.numTilesOwned(); const traitorMod = defender.isTraitor() ? this.traitorDefenseDebuff() : 1; const currentAttackerLoss = within(defender.troops() / attackTroops, 0.6, 2) * mag * 0.8 * largeDefenderAttackDebuff * largeAttackBonus * traitorMod; const altAttackerLoss = 1.3 * defenderTroopLoss * (mag / 100) * traitorMod; const attackerTroopLoss = 0.7 * currentAttackerLoss + 0.3 * altAttackerLoss; return { attackerTroopLoss, defenderTroopLoss, tilesPerTickUsed: within(defender.troops() / (5 * attackTroops), 0.2, 1.5) * speed * largeDefenderSpeedDebuff * largeAttackerSpeedBonus * (defender.isTraitor() ? this.traitorSpeedDebuff() : 1), }; } else { return { attackerTroopLoss: attacker.type() === PlayerType.Bot ? mag / 10 : mag / 5, defenderTroopLoss: 0, tilesPerTickUsed: within( (2000 * Math.max(10, speed)) / attackTroops, 5, 100, ), }; }",
+      "dependsOn": [
+        "terrainType",
+        "nearbyDefensePosts",
+        "falloutRatio",
+        "attackerType",
+        "defenderType",
+        "sameTeam",
+        "defenderDisconnected",
+        "attackerTilesOwned",
+        "defenderTilesOwned",
+        "defenderTroops",
+        "attackTroops",
+        "traitorState"
+      ]
+    },
+    "attackTilesPerTick": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "if (defender.isPlayer()) { return ( within(((5 * attackTroops) / defender.troops()) * 2, 0.01, 0.5) * numAdjacentTilesWithEnemy * 3 ); } else { return numAdjacentTilesWithEnemy * 2; }",
+      "dependsOn": [
+        "attackTroops",
+        "defenderTroops",
+        "numAdjacentTilesWithEnemy",
+        "defenderType"
+      ]
+    },
+    "attackAmount": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "if (attacker.type() === PlayerType.Bot) { return attacker.troops() / 20; } else { return attacker.troops() / 5; }",
+      "dependsOn": [
+        "attackerType",
+        "attackerTroops"
+      ]
+    },
+    "boatAttackAmount": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "return Math.floor(attacker.troops() / 5);",
+      "dependsOn": [
+        "attackerTroops"
+      ]
+    },
+    "samRange": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "this.maxSamRange() - 480 / (level + 5)",
+      "dependsOn": [
+        "level",
+        "maxSamRange"
+      ]
+    },
+    "nukeDeathFactor": {
+      "kind": "formula",
+      "sourceFile": ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts",
+      "sourceExpression": "if (nukeType !== UnitType.MIRVWarhead) { return (5 * humans) / Math.max(1, tilesOwned); } const targetTroops = 0.03 * maxTroops; const excessTroops = Math.max(0, humans - targetTroops); const scalingFactor = 500; const steepness = 2; const normalizedExcess = excessTroops / maxTroops; return scalingFactor * (1 - Math.exp(-steepness * normalizedExcess));",
+      "dependsOn": [
+        "nukeType",
+        "humans",
+        "tilesOwned",
+        "maxTroops"
+      ]
+    }
+  },
+  "playlistDerived": {
+    "maxPlayerCountCap": 125,
+    "teamWeights": [
+      {
+        "config": "2",
+        "weight": 10
+      },
+      {
+        "config": "3",
+        "weight": 10
+      },
+      {
+        "config": "4",
+        "weight": 10
+      },
+      {
+        "config": "5",
+        "weight": 10
+      },
+      {
+        "config": "6",
+        "weight": 10
+      },
+      {
+        "config": "7",
+        "weight": 10
+      },
+      {
+        "config": "Duos",
+        "weight": 5
+      },
+      {
+        "config": "Trios",
+        "weight": 7.5
+      },
+      {
+        "config": "Quads",
+        "weight": 7.5
+      },
+      {
+        "config": "Humans Vs Nations",
+        "weight": 20
+      }
+    ],
+    "specialModifierPoolWeights": [
+      {
+        "modifier": "isRandomSpawn",
+        "tickets": 2
+      },
+      {
+        "modifier": "isCompact",
+        "tickets": 4
+      },
+      {
+        "modifier": "isCrowded",
+        "tickets": 2
+      },
+      {
+        "modifier": "isHardNations",
+        "tickets": 1
+      },
+      {
+        "modifier": "startingGold1M",
+        "tickets": 3
+      },
+      {
+        "modifier": "startingGold5M",
+        "tickets": 5
+      },
+      {
+        "modifier": "startingGold25M",
+        "tickets": 1
+      },
+      {
+        "modifier": "goldMultiplier",
+        "tickets": 4
+      },
+      {
+        "modifier": "isAlliancesDisabled",
+        "tickets": 1
+      },
+      {
+        "modifier": "isPortsDisabled",
+        "tickets": 1
+      },
+      {
+        "modifier": "isNukesDisabled",
+        "tickets": 1
+      },
+      {
+        "modifier": "isSAMsDisabled",
+        "tickets": 1
+      },
+      {
+        "modifier": "isPeaceTime",
+        "tickets": 1
+      },
+      {
+        "modifier": "isWaterNukes",
+        "tickets": 3
+      }
+    ],
+    "mutuallyExclusiveModifiers": [
+      [
+        "startingGold5M",
+        "startingGold25M"
+      ],
+      [
+        "startingGold5M",
+        "startingGold1M"
+      ],
+      [
+        "startingGold25M",
+        "startingGold1M"
+      ],
+      [
+        "isHardNations",
+        "startingGold25M"
+      ],
+      [
+        "isNukesDisabled",
+        "isSAMsDisabled"
+      ],
+      [
+        "isNukesDisabled",
+        "isWaterNukes"
+      ]
+    ],
+    "spawnImmunityRules": [
+      {
+        "when": "Humans Vs Nations",
+        "ticks": 50,
+        "source": "if (playerTeams === HumansVsNations) return 5 * 10;"
+      },
+      {
+        "when": "startingGold >= 25_000_000",
+        "ticks": 1500,
+        "source": "if (startingGold !== undefined && startingGold >= 25_000_000) return 150 * 10;"
+      },
+      {
+        "when": "startingGold is truthy and below 25_000_000",
+        "ticks": 450,
+        "source": "if (startingGold) return SAM_CONSTRUCTION_TICKS + 15 * 10;"
+      },
+      {
+        "when": "default",
+        "ticks": 50,
+        "source": "return 5 * 10;"
+      }
+    ],
+    "disabledUnitsByModifier": {
+      "isPortsDisabled": [
+        "Port"
+      ],
+      "isNukesDisabled": [
+        "MissileSilo",
+        "AtomBomb",
+        "HydrogenBomb",
+        "MIRV",
+        "SAMLauncher"
+      ],
+      "isSAMsDisabled": [
+        "SAMLauncher"
+      ]
+    },
+    "oneVOneDefaults": {
+      "rankedType": "1v1",
+      "maxPlayers": 2,
+      "maxTimerValueMinutes": {
+        "compact": 10,
+        "normal": 15
+      },
+      "spawnImmunityTicks": 300
+    }
+  },
+  "deferredCategories": [
+    {
+      "category": "runtime action legality",
+      "reason": "GameRunner.playerActions() and Player capability methods depend on live tile ownership, borders, alliances, embargoes, and stateful cooldowns.",
+      "sources": [
+        ".tmp/OpenFrontIO-upstream/src/core/GameRunner.ts",
+        ".tmp/OpenFrontIO-upstream/src/core/game/Game.ts"
+      ]
+    },
+    {
+      "category": "effective team assignment and team labels",
+      "reason": "GameImpl.populateTeams() and assignTeams() derive concrete teams from player counts and special team modes at runtime.",
+      "sources": [
+        ".tmp/OpenFrontIO-upstream/src/core/game/GameImpl.ts"
+      ]
+    },
+    {
+      "category": "effective win resolution",
+      "reason": "Win thresholds are extracted, but actual winner selection still depends on current tiles without fallout, disconnections, ranked mode, and timer state.",
+      "sources": [
+        ".tmp/OpenFrontIO-upstream/src/core/execution/WinCheckExecution.ts"
+      ]
+    },
+    {
+      "category": "combat outcomes",
+      "reason": "Base formulas are extracted, but actual losses and tile throughput depend on dynamic terrain, nearby units, fallout, troop counts, and traitor state.",
+      "sources": [
+        ".tmp/OpenFrontIO-upstream/src/core/configuration/DefaultConfig.ts"
+      ]
+    },
+    {
+      "category": "public playlist RNG outcomes",
+      "reason": "Weights and rule tables are extracted, but the actual public lobby result is randomized at runtime.",
+      "sources": [
+        ".tmp/OpenFrontIO-upstream/src/server/MapPlaylist.ts"
+      ]
+    }
+  ]
+}
