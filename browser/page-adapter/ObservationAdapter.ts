@@ -416,7 +416,7 @@ export async function normalizeObservation(
   const config = game.config();
   const rawGameConfig = config.gameConfig();
   const players = sortPlayers(game.players());
-  const myPlayer = game.myPlayer?.() ?? null;
+  const myPlayer = resolveOwnPlayer(game, players);
   const now = new Date().toISOString();
 
   const allEntities = sortUnits(game.units()).map((unit) =>
@@ -709,6 +709,22 @@ function normalizeSpawnState(
     blockedReason:
       sortedLegalTileRefs.length > 0 ? null : "no_legal_spawn_tiles",
   };
+}
+
+function resolveOwnPlayer(
+  game: ObservationGameLike,
+  players: readonly ObservationPlayerLike[],
+): ObservationPlayerLike | null {
+  const directMyPlayer = game.myPlayer?.() ?? null;
+  const myClientID = game.myClientID?.() ?? null;
+  if (myClientID === null) {
+    return directMyPlayer;
+  }
+  if (directMyPlayer?.clientID() === myClientID) {
+    return directMyPlayer;
+  }
+  const matchingPlayer = players.find((player) => player.clientID() === myClientID);
+  return matchingPlayer ?? directMyPlayer;
 }
 
 async function normalizeFrontiers(
