@@ -711,6 +711,22 @@ function resolveOutcome(
   startedGameId: string | null,
   previousObservedTick: number,
 ): EvalResolution | null {
+  const clientOwnershipMismatch = detectClientOwnershipMismatch(observation);
+  if (clientOwnershipMismatch) {
+    return {
+      outcome: "invalid",
+      reason: clientOwnershipMismatch,
+    };
+  }
+
+  const tileOwnershipMismatch = detectTileOwnershipMismatch(gameView, observation);
+  if (tileOwnershipMismatch) {
+    return {
+      outcome: "invalid",
+      reason: tileOwnershipMismatch,
+    };
+  }
+
   const winnerUpdate = findWinnerUpdate(gameView);
   if (winnerUpdate?.winner) {
     return {
@@ -735,6 +751,71 @@ function resolveOutcome(
       outcome: "invalid",
       reason: `tick_regressed:${previousObservedTick}->${observation.game.tick}`,
     };
+  }
+
+  return null;
+}
+
+function detectClientOwnershipMismatch(observation: Observation): string | null {
+  const ownPlayer = observation.ownPlayer;
+  const sessionClientID = observation.game.session.myClientID;
+  if (!ownPlayer || !sessionClientID || !ownPlayer.clientID) {
+    return null;
+  }
+
+  if (ownPlayer.clientID !== sessionClientID) {
+    return `my_client_id_mismatch:${sessionClientID}->${ownPlayer.clientID}`;
+  }
+
+  return null;
+}
+
+function detectTileOwnershipMismatch(
+  gameView: unknown,
+  observation: Observation,
+): string | null {
+  const ownPlayer = observation.ownPlayer;
+  if (!ownPlayer || ownPlayer.hasSpawned === false) {
+    return null;
+  }
+  if (
+    typeof gameView !== "object" ||
+    gameView === null ||
+    typeof (gameView as { width?: unknown }).width !== "function" ||
+    typeof (gameView as { height?: unknown }).height !== "function" ||
+    typeof (gameView as { ref?: unknown }).ref !== "function" ||
+    typeof (gameView as { isLand?: unknown }).isLand !== "function" ||
+    typeof (gameView as { hasOwner?: unknown }).hasOwner !== "function" ||
+    typeof (gameView as { owner?: unknown }).owner !== "function"
+  ) {
+    return null;
+  }
+
+  let countedOwnedTiles = 0;
+  const width = (gameView as { width(): number }).width();
+  const height = (gameView as { height(): number }).height();
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const tileRef = (gameView as { ref(x: number, y: number): number }).ref(x, y);
+      if (!(gameView as { isLand(tileRef: number): boolean }).isLand(tileRef)) {
+        continue;
+      }
+      if (!(gameView as { hasOwner(tileRef: number): boolean }).hasOwner(tileRef)) {
+        continue;
+      }
+
+      const owner = (
+        gameView as { owner(tileRef: number): { id?: () => string | null } | null }
+      ).owner(tileRef);
+      if (typeof owner?.id === "function" && owner.id() === ownPlayer.playerId) {
+        countedOwnedTiles++;
+      }
+    }
+  }
+
+  if (countedOwnedTiles !== ownPlayer.tilesOwned) {
+    return `owned_tile_count_mismatch:${ownPlayer.tilesOwned}->${countedOwnedTiles}`;
   }
 
   return null;
