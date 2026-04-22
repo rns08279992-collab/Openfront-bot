@@ -416,7 +416,7 @@ export async function normalizeObservation(
   const config = game.config();
   const rawGameConfig = config.gameConfig();
   const players = sortPlayers(game.players());
-  const myPlayer = game.myPlayer?.() ?? null;
+  const myPlayer = resolveOwnPlayer(game, players);
   const now = new Date().toISOString();
 
   const allEntities = sortUnits(game.units()).map((unit) =>
@@ -441,6 +441,33 @@ export async function normalizeObservation(
       isStructureEntity(game, entity),
     ),
   };
+}
+
+function resolveOwnPlayer(
+  game: ObservationGameLike,
+  players: ObservationPlayerLike[],
+): ObservationPlayerLike | null {
+  const directMyPlayer = game.myPlayer?.() ?? null;
+  if (directMyPlayer) {
+    const matchingPlayer = players.find(
+      (player) => player.id() === directMyPlayer.id(),
+    );
+    if (matchingPlayer) {
+      return matchingPlayer;
+    }
+  }
+
+  const myClientID = game.myClientID?.() ?? null;
+  if (myClientID) {
+    const matchingByClient = players.find(
+      (player) => player.clientID() === myClientID,
+    );
+    if (matchingByClient) {
+      return matchingByClient;
+    }
+  }
+
+  return directMyPlayer;
 }
 
 function normalizeGameMetadata(
