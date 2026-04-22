@@ -19,7 +19,7 @@ type EvalProfileName =
   | "hard"
   | "impossible";
 
-type EvalOutcome = "win" | "loss" | "timeout" | "invalid";
+type EvalOutcome = "win" | "loss" | "timeout" | "invalid" | "aborted";
 
 const RUNTIME_MISSING_ABORT_POLLS = 3;
 
@@ -60,10 +60,14 @@ interface EvalSessionSummary {
   profile: EvalProfileName;
   matchesRequested: number;
   matchesCompleted: number;
+  validOutcomes: number;
+  invalidOutcomes: number;
+  abortedOutcomes: number;
   wins: number;
   losses: number;
   timeouts: number;
   invalids: number;
+  aborted: number;
 }
 
 interface EvalSinglePlayerModal extends HTMLElement {
@@ -176,7 +180,7 @@ class LocalEvalRunner {
           missingRuntimePolls++;
           if (missingRuntimePolls >= RUNTIME_MISSING_ABORT_POLLS) {
             const resolution: EvalResolution = {
-              outcome: "invalid",
+              outcome: "aborted",
               reason: "runtime_missing_before_authoritative_match_end",
             };
             console.info("[openfront-bot-eval] match finished", {
@@ -386,6 +390,7 @@ class LocalEvalRunner {
     let losses = 0;
     let timeouts = 0;
     let invalids = 0;
+    let aborted = 0;
 
     for (const result of results) {
       if (result.outcome === "win") {
@@ -394,19 +399,29 @@ class LocalEvalRunner {
         losses++;
       } else if (result.outcome === "invalid") {
         invalids++;
+      } else if (result.outcome === "aborted") {
+        aborted++;
       } else {
         timeouts++;
       }
     }
 
+    const abortedOutcomes = aborted;
+    const invalidOutcomes = invalids + abortedOutcomes;
+    const validOutcomes = results.length - invalidOutcomes;
+
     return {
       profile: this.config.profile,
       matchesRequested: this.config.matches,
       matchesCompleted: results.length,
+      validOutcomes,
+      invalidOutcomes,
+      abortedOutcomes,
       wins,
       losses,
       timeouts,
       invalids,
+      aborted,
     };
   }
 
