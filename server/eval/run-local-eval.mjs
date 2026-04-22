@@ -28,6 +28,7 @@ const state = {
   timeoutMs: args.timeoutMs,
   matches: [],
   summary: null,
+  smoke: null,
 };
 
 const server = http.createServer(async (req, res) => {
@@ -66,14 +67,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.url === "/match") {
-      state.matches.push(body);
+      state.matches.push(normalizeMatchRecord(body, state.matches.length + 1));
       writeState();
       respondJson(res, 200, { ok: true });
       return;
     }
 
     if (req.url === "/complete") {
-      state.summary = body.summary ?? null;
+      state.summary = normalizeSummary(body.summary, state.matches, state);
+      state.smoke = deriveSmokeStatus(state.summary);
       writeState();
       respondJson(res, 200, { ok: true, outputPath });
       return;
@@ -217,6 +219,7 @@ function resetState(body) {
     timeoutMs: parsePositiveInteger(body.timeoutMs, args.timeoutMs),
     matches: [],
     summary: null,
+    smoke: null,
   });
 }
 
@@ -246,6 +249,118 @@ function resolveOutputPath({ startedAtIso, profile, matches, explicitOutput }) {
 
 function writeState() {
   fs.writeFileSync(outputPath, JSON.stringify(state, null, 2));
+}
+
+function normalizeMatchRecord(input, fallbackMatchIndex) {
+  const output = typeof input === "object" && input !== null ? { ...input } : {};
+  const outcome = sanitizeOutcome(output.outcome);
+  const endReason = typeof output.endReason === "string" ? output.endReason : "unknown";
+  const valid = outcome === "win" || outcome === "loss" || outcome === "timeout";
+
+  return {
+    ...output,
+    matchIndex: parsePositiveInteger(output.matchIndex, fallbackMatchIndex),
+    outcome,
+    endReason,
+    status: valid ? "valid" : outcome === "aborted" ? "aborted" : "invalid",
+    valid,
+  };
+}
+
+function sanitizeOutcome(outcome) {
+  switch (String(outcome).toLowerCase()) {
+    case "win":
+    case "loss":
+    case "timeout":
+    case "invalid":
+    case "aborted":
+      return String(outcome).toLowerCase();
+    default:
+      return "invalid";
+  }
+}
+
+function normalizeSummary(input, matches, session) {
+  const computed = computeSummaryFromMatches(matches, session);
+  if (!input || typeof input !== "object") {
+    return computed;
+  }
+
+  return {
+    ...computed,
+    profile: sanitizeProfile(input.profile ?? computed.profile),
+    matchesRequested: parsePositiveInteger(
+      input.matchesRequested,
+      computed.matchesRequested,
+    ),
+    matchesCompleted: parsePositiveInteger(
+      input.matchesCompleted,
+      computed.matchesCompleted,
+    ),
+  };
+}
+
+function computeSummaryFromMatches(matches, session) {
+  const summary = {
+    profile: sanitizeProfile(session.profile),
+    matchesRequested: parsePositiveInteger(session.matchesRequested, 1),
+    matchesCompleted: matches.length,
+    validOutcomes: 0,
+    invalidOutcomes: 0,
+    abortedOutcomes: 0,
+    wins: 0,
+    losses: 0,
+    timeouts: 0,
+    invalids: 0,
+    aborted: 0,
+  };
+
+  for (const match of matches) {
+    switch (sanitizeOutcome(match?.outcome)) {
+      case "win":
+        summary.wins += 1;
+        summary.validOutcomes += 1;
+        break;
+      case "loss":
+        summary.losses += 1;
+        summary.validOutcomes += 1;
+        break;
+      case "timeout":
+        summary.timeouts += 1;
+        summary.validOutcomes += 1;
+        break;
+      case "aborted":
+        summary.aborted += 1;
+        summary.abortedOutcomes += 1;
+        summary.invalidOutcomes += 1;
+        break;
+      default:
+        summary.invalids += 1;
+        summary.invalidOutcomes += 1;
+        break;
+    }
+  }
+
+  return summary;
+}
+
+function deriveSmokeStatus(summary) {
+  if (!summary) {
+    return null;
+  }
+
+  const requested = parsePositiveInteger(summary.matchesRequested, 1);
+  const completed = parsePositiveInteger(summary.matchesCompleted, 0);
+  const shortfall = Math.max(0, requested - completed);
+  const passed = shortfall === 0 && summary.invalidOutcomes === 0;
+
+  return {
+    requested,
+    completed,
+    shortfall,
+    invalidOutcomes: summary.invalidOutcomes,
+    passed,
+  };
 }
 
 function listenWithFallback(serverInstance, startingPort, attempts) {
