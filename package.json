@@ -4,6 +4,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "extract-mechanics": "node scripts/extract-mechanics.ts",
+    "eval:prepare": "node scripts/prepare-local-eval.mjs",
     "eval:local": "node server/eval/run-local-eval.mjs"
   },
   "devDependencies": {
