@@ -11,6 +11,7 @@ export type BaselineBotAction = Extract<
     type:
       | "spawn_at_tile"
       | "attack_player"
+      | "send_boat"
       | "upgrade_structure"
       | "request_alliance";
   }
@@ -32,13 +33,11 @@ const SAFE_ATTACK_TROOP_RATIO = 1.5;
 const SAFE_ATTACK_TILE_RATIO = 1.1;
 const MIN_ATTACK_TROOPS = 5_000;
 const OPENING_TARGET_MEMORY_TICKS = 4;
-const OPENING_ATTACK_DEBOUNCE_TICKS = 2;
-const OPENING_EXPANSION_THROTTLE_TICKS = 3;
-const OPENING_EXPANSION_STREAK_RESET_TICKS = 8;
-const MAX_CONSECUTIVE_OPENING_EXPANSION_PUSHES = 2;
+const OPENING_ATTACK_DEBOUNCE_TICKS = 1;
+const SPAWN_SHORTLIST_SIZE = 5;
 const MIN_OPENING_SUPPORT = 2;
-const MIN_EXPANSION_RESERVE_TROOPS = 8_000;
-const MIN_EXPANSION_TROOP_CAP_RATIO = 0.55;
+const CRITICAL_EXPANSION_RESERVE_TROOPS = 2_000;
+const BOAT_FALLBACK_TROOP_RATIO = 0.2;
 const BUILD_PHASE_DEFER_REASON =
   "No safe build/economy action is confirmed in the current IntentAdapter surface, so the baseline defers this phase instead of inventing unsupported behavior.";
 const GUARANTEED_ECONOMY_UPGRADE_GOLD = 1_000_000n;
@@ -63,6 +62,10 @@ interface BaselineOpeningState {
 }
 
 const openingStateByPlayerId = new Map<string, BaselineOpeningState>();
+const spawnSelectionByPlayerId = new Map<
+  string,
+  { spawnKey: string; tileRef: number }
+>();
 
 type BaselineStrategyState = ReturnType<typeof interpretObservation>;
 
@@ -140,12 +143,12 @@ function chooseBaselinePhase(
     return "hold_defend";
   }
 
-  if (shouldHoldDefensiveLine(observation, strategy)) {
-    return "hold_defend";
-  }
-
   if (shouldUseOpeningExpansionPhase(observation, openingState, strategy)) {
     return "opening_expansion";
+  }
+
+  if (shouldHoldDefensiveLine(observation, strategy)) {
+    return "hold_defend";
   }
 
   return "economy_build";
@@ -168,6 +171,7 @@ function chooseOpeningExpansionPhaseAction(
   return (
     chooseCheapExpansionAction(observation, openingState, strategy) ??
     chooseAttackAction(observation, openingState, strategy) ??
+    chooseBoatFallbackAction(observation, strategy) ??
     chooseAllianceAction(observation, openingState)
   );
 }
@@ -196,6 +200,7 @@ function chooseEconomyBuildPhaseAction(
     action:
       economyBuildAction ??
       chooseAttackAction(observation, openingState, strategy) ??
+      chooseBoatFallbackAction(observation, strategy) ??
       chooseAllianceAction(observation, openingState),
     reason: economyBuildAction ? undefined : BUILD_PHASE_DEFER_REASON,
   };
@@ -261,7 +266,7 @@ function chooseRememberedOpeningAction(
   }
 
   if (rememberedTarget.kind === "expansion") {
-    if (shouldStopAggressiveExpansion(observation, openingState, strategy)) {
+    if (shouldStopAggressiveExpansion(observation, strategy)) {
       openingState.rememberedTarget = null;
       return undefined;
     }
@@ -363,18 +368,55 @@ function chooseCheapExpansionAction(
     return null;
   }
 
-  if (shouldStopAggressiveExpansion(observation, openingState, strategy)) {
+  if (shouldStopAggressiveExpansion(observation, strategy)) {
     return null;
   }
 
-  const candidate =
-    strategy.frontierCombat.bestExpansionCandidate ??
-    chooseBestExpansionCandidate(frontiers);
+  const tileRef = chooseExpansionTileRef(observation, strategy);
+  if (tileRef === null) {
+    return null;
+  }
+
+  return createExpansionAction(observation, openingState, tileRef);
+}
+
+function chooseBoatFallbackAction(
+  observation: Observation,
+  strategy: BaselineStrategyState,
+): BaselineBotAction | null {
+  const player = observation.ownPlayer;
+  if (
+    !player ||
+    !player.hasSpawned ||
+    !player.isAlive ||
+    observation.game.session.spawnImmunityActive ||
+    observation.game.session.nationSpawnImmunityActive
+  ) {
+    return null;
+  }
+
+  if (chooseExpansionTileRef(observation, strategy) !== null) {
+    return null;
+  }
+
+  if (!shouldAttemptBoatFallback(observation, strategy)) {
+    return null;
+  }
+
+  const candidate = chooseBoatFallbackCandidate(observation);
   if (!candidate) {
     return null;
   }
 
-  return createExpansionAction(observation, openingState, candidate.tile.tileRef);
+  const troops = Math.max(
+    1,
+    Math.floor(player.troops * BOAT_FALLBACK_TROOP_RATIO),
+  );
+  return {
+    type: "send_boat",
+    destinationTile: candidate.tile.tileRef,
+    troops,
+  };
 }
 
 function chooseEconomyBuildAction(
@@ -433,26 +475,90 @@ function getExplicitSpawnTileCandidate(
   const spawn = observation.spawn;
 
   if (!player || player.hasSpawned || !spawn.actionable) {
+    if (player?.playerId) {
+      spawnSelectionByPlayerId.delete(player.playerId);
+    }
     return null;
   }
 
-  if (strategy.spawnOpening.recommendedSpawn?.tile.tileRef !== undefined) {
-    return strategy.spawnOpening.recommendedSpawn.tile.tileRef;
+  const legalTileRefs = getLegalSpawnTileRefs(observation);
+  if (legalTileRefs.length === 0) {
+    return null;
   }
 
-  if (spawn.firstLegalTileRef !== null) {
-    return spawn.firstLegalTileRef;
+  const spawnKey = `${observation.game.gameID ?? "unknown"}:${player.playerId}`;
+  const existing = spawnSelectionByPlayerId.get(player.playerId);
+  if (
+    existing?.spawnKey === spawnKey &&
+    legalTileRefs.includes(existing.tileRef)
+  ) {
+    return existing.tileRef;
   }
 
-  if (spawn.legalTileRefs && spawn.legalTileRefs.length > 0) {
-    return spawn.legalTileRefs[0];
+  const ranked = rankSpawnTileRefs(legalTileRefs, strategy);
+  const shortlist = ranked.slice(0, Math.min(SPAWN_SHORTLIST_SIZE, ranked.length));
+  const selected =
+    shortlist[stableSpawnChoiceIndex(spawnKey, shortlist.length)] ?? ranked[0];
+  spawnSelectionByPlayerId.set(player.playerId, {
+    spawnKey,
+    tileRef: selected,
+  });
+
+  return selected;
+}
+
+function getLegalSpawnTileRefs(observation: Observation): number[] {
+  const refs = new Set<number>();
+  const spawn = observation.spawn;
+
+  for (const tileRef of spawn.legalTileRefs ?? []) {
+    refs.add(tileRef);
   }
 
-  if (spawn.legalTiles && spawn.legalTiles.length > 0) {
-    return spawn.legalTiles[0].tileRef;
+  for (const tile of spawn.legalTiles ?? []) {
+    refs.add(tile.tileRef);
   }
 
-  return null;
+  if (refs.size === 0 && spawn.firstLegalTileRef !== null) {
+    refs.add(spawn.firstLegalTileRef);
+  }
+
+  return [...refs].sort((left, right) => left - right);
+}
+
+function rankSpawnTileRefs(
+  legalTileRefs: readonly number[],
+  strategy: BaselineStrategyState,
+): number[] {
+  const recommendedTileRef = strategy.spawnOpening.recommendedSpawn?.tile.tileRef;
+  if (
+    recommendedTileRef === undefined ||
+    !legalTileRefs.includes(recommendedTileRef)
+  ) {
+    return [...legalTileRefs];
+  }
+
+  return [...legalTileRefs].sort((left, right) => {
+    const leftDistance = Math.abs(left - recommendedTileRef);
+    const rightDistance = Math.abs(right - recommendedTileRef);
+    if (leftDistance !== rightDistance) {
+      return leftDistance - rightDistance;
+    }
+    return left - right;
+  });
+}
+
+function stableSpawnChoiceIndex(key: string, candidateCount: number): number {
+  if (candidateCount <= 1) {
+    return 0;
+  }
+
+  let hash = 2166136261;
+  for (let index = 0; index < key.length; index++) {
+    hash ^= key.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % candidateCount;
 }
 
 function isClearlySafeAttackTarget(
@@ -591,15 +697,50 @@ function chooseBestExpansionCandidate(
   })[0] ?? null;
 }
 
+function chooseExpansionTileRef(
+  observation: Observation,
+  strategy: BaselineStrategyState,
+): number | null {
+  const frontiers = observation.frontiers;
+  if (!frontiers) {
+    return null;
+  }
+
+  const bestCandidate = strategy.frontierCombat.bestExpansionCandidate;
+  if (bestCandidate) {
+    return bestCandidate.tile.tileRef;
+  }
+
+  const cheapCandidate = chooseBestExpansionCandidate(frontiers);
+  if (cheapCandidate) {
+    return cheapCandidate.tile.tileRef;
+  }
+
+  return (
+    frontiers.nearbyFrontierTiles[0]?.tileRef ??
+    frontiers.nearbyFrontierTileRefs[0] ??
+    null
+  );
+}
+
+function chooseBoatFallbackCandidate(observation: Observation) {
+  const player = observation.ownPlayer;
+  const candidates = observation.boatTargets;
+  if (!player || candidates.length === 0) {
+    return null;
+  }
+
+  return (
+    candidates[(observation.game.tick + player.smallID) % candidates.length] ??
+    null
+  );
+}
+
 function createExpansionAction(
   observation: Observation,
   openingState: BaselineOpeningState,
   tileRef: number,
 ): BaselineBotAction | null {
-  if (isExpansionThrottled(openingState, observation.game.tick)) {
-    return null;
-  }
-
   const attackKey = `expansion:${tileRef}`;
   if (isOpeningAttackDebounced(openingState, observation.game.tick, attackKey)) {
     return null;
@@ -703,30 +844,6 @@ function isOpeningAttackDebounced(
     openingState.lastAttackKey === attackKey &&
     openingState.lastAttackTick !== null &&
     tick - openingState.lastAttackTick < OPENING_ATTACK_DEBOUNCE_TICKS
-  );
-}
-
-function isExpansionThrottled(
-  openingState: BaselineOpeningState,
-  tick: number,
-): boolean {
-  if (
-    openingState.lastExpansionTick !== null &&
-    tick - openingState.lastExpansionTick >= OPENING_EXPANSION_STREAK_RESET_TICKS
-  ) {
-    openingState.consecutiveExpansionPushes = 0;
-  }
-
-  if (
-    openingState.lastExpansionTick !== null &&
-    tick - openingState.lastExpansionTick < OPENING_EXPANSION_THROTTLE_TICKS
-  ) {
-    return true;
-  }
-
-  return (
-    openingState.consecutiveExpansionPushes >=
-    MAX_CONSECUTIVE_OPENING_EXPANSION_PUSHES
   );
 }
 
@@ -858,13 +975,16 @@ function shouldUseOpeningExpansionPhase(
     return true;
   }
 
-  if (strategy.frontierCombat.recommendedAttackPosture === "avoid") {
+  if (
+    strategy.frontierCombat.recommendedAttackPosture === "avoid" &&
+    chooseExpansionTileRef(observation, strategy) === null
+  ) {
     return false;
   }
 
   return (
-    strategy.frontierCombat.bestExpansionCandidate !== null ||
-    chooseBestExpansionCandidate(observation.frontiers) !== null
+    chooseExpansionTileRef(observation, strategy) !== null ||
+    chooseBoatFallbackCandidate(observation) !== null
   );
 }
 
@@ -873,72 +993,32 @@ function shouldHoldDefensiveLine(
   strategy: BaselineStrategyState,
 ): boolean {
   const player = observation.ownPlayer;
-  if (
-    strategy.frontierCombat.recommendedAttackPosture === "hold" ||
-    strategy.frontierCombat.recommendedAttackPosture === "avoid"
-  ) {
-    return true;
-  }
-
-  if (
-    strategy.frontierCombat.localThreatLevel.band === "high" ||
-    strategy.frontierCombat.localThreatLevel.band === "very_high"
-  ) {
-    return true;
-  }
-
   const strongestNearbyHostile = getStrongestNearbyHostile(observation);
   if (!player || !strongestNearbyHostile) {
     return false;
   }
 
-  return !isClearlySafeAttackTarget(player, strongestNearbyHostile);
+  if (
+    strategy.frontierCombat.localThreatLevel.band !== "high" &&
+    strategy.frontierCombat.localThreatLevel.band !== "very_high" &&
+    strategy.frontierCombat.recommendedAttackPosture !== "avoid"
+  ) {
+    return false;
+  }
+
+  return isMeaningfullyDangerousAdjacentHostile(player, strongestNearbyHostile);
 }
 
 function shouldStopAggressiveExpansion(
   observation: Observation,
-  openingState: BaselineOpeningState,
   strategy: BaselineStrategyState,
 ): boolean {
   const player = observation.ownPlayer;
-  const economy = observation.economy;
-  const frontiers = observation.frontiers;
-  if (!player || !frontiers) {
+  if (!player) {
     return false;
   }
 
-  if (
-    strategy.frontierCombat.recommendedAttackPosture === "hold" ||
-    strategy.frontierCombat.recommendedAttackPosture === "avoid"
-  ) {
-    return true;
-  }
-
-  if (
-    strategy.frontierCombat.localThreatLevel.band === "high" ||
-    strategy.frontierCombat.localThreatLevel.band === "very_high"
-  ) {
-    return true;
-  }
-
-  if (isExpansionThrottled(openingState, observation.game.tick)) {
-    return true;
-  }
-
-  if (player.troops < MIN_EXPANSION_RESERVE_TROOPS) {
-    return true;
-  }
-
-  if (
-    economy?.maxTroops !== null &&
-    economy?.maxTroops !== undefined &&
-    economy.maxTroops > 0 &&
-    economy.troops / economy.maxTroops < MIN_EXPANSION_TROOP_CAP_RATIO
-  ) {
-    return true;
-  }
-
-  if (frontiers.adjacentHostilePlayers.length === 0) {
+  if ((observation.frontiers?.adjacentHostilePlayers.length ?? 0) === 0) {
     return false;
   }
 
@@ -946,7 +1026,57 @@ function shouldStopAggressiveExpansion(
 
   return (
     strongestNearbyHostile !== undefined &&
-    !isClearlySafeAttackTarget(player, strongestNearbyHostile)
+    isMeaningfullyDangerousAdjacentHostile(player, strongestNearbyHostile) &&
+    (strategy.frontierCombat.localThreatLevel.band === "high" ||
+      strategy.frontierCombat.localThreatLevel.band === "very_high" ||
+      strategy.frontierCombat.recommendedAttackPosture === "avoid")
+  );
+}
+
+function isExpansionReserveCritical(observation: Observation): boolean {
+  const player = observation.ownPlayer;
+  if (!player) {
+    return true;
+  }
+
+  return player.troops < CRITICAL_EXPANSION_RESERVE_TROOPS;
+}
+
+function shouldAttemptBoatFallback(
+  observation: Observation,
+  strategy: BaselineStrategyState,
+): boolean {
+  if (isExpansionReserveCritical(observation)) {
+    return false;
+  }
+
+  if (
+    strategy.frontierCombat.recommendedAttackPosture === "hold" ||
+    strategy.frontierCombat.recommendedAttackPosture === "avoid" ||
+    strategy.frontierCombat.localThreatLevel.band === "high" ||
+    strategy.frontierCombat.localThreatLevel.band === "very_high"
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function isMeaningfullyDangerousAdjacentHostile(
+  player: NonNullable<Observation["ownPlayer"]>,
+  hostile: ObservationDiplomacyPlayer,
+): boolean {
+  if (!hostile.isAlive || !hostile.hasSpawned || hostile.isDisconnected) {
+    return false;
+  }
+
+  if (hostile.troops <= 0 || hostile.tilesOwned <= 0) {
+    return false;
+  }
+
+  return (
+    hostile.troops >= player.troops * 1.15 ||
+    hostile.tilesOwned >= player.tilesOwned * 1.4
   );
 }
 

@@ -13,6 +13,7 @@ const INTENT_ADAPTER_VERSION = 1 as const;
 export type IntentAdapterActionType =
   | "spawn_at_tile"
   | "attack_player"
+  | "send_boat"
   | "upgrade_structure"
   | "request_alliance"
   | "break_alliance"
@@ -44,6 +45,12 @@ export interface AttackPlayerAdapterAction {
   readonly type: "attack_player";
   readonly targetPlayerId: ProtocolId | null;
   readonly troops: number | null;
+}
+
+export interface SendBoatAdapterAction {
+  readonly type: "send_boat";
+  readonly destinationTile: number;
+  readonly troops: number;
 }
 
 export interface RequestAllianceAdapterAction {
@@ -99,6 +106,7 @@ export interface DeleteUnitAdapterAction {
 export type IntentAdapterAction =
   | SpawnAtTileAdapterAction
   | AttackPlayerAdapterAction
+  | SendBoatAdapterAction
   | UpgradeStructureAdapterAction
   | RequestAllianceAdapterAction
   | BreakAllianceAdapterAction
@@ -143,6 +151,7 @@ export const INTENT_ADAPTER_METADATA = {
 export const IMPLEMENTED_INTENT_ADAPTER_ACTION_TYPES = [
   "spawn_at_tile",
   "attack_player",
+  "send_boat",
   "upgrade_structure",
   "request_alliance",
   "break_alliance",
@@ -183,6 +192,16 @@ const CAPABILITIES: Record<AnyIntentAdapterActionType, IntentAdapterCapability> 
     allowedPhases: ["active"],
     risk: "safe",
     notes: "Confirmed gameplay attack intent with nullable target and troops.",
+  },
+  send_boat: {
+    actionType: "send_boat",
+    supported: true,
+    transportActionType: "intent",
+    protocolIntentType: "boat",
+    requiresLobbyCreator: false,
+    allowedPhases: ["active"],
+    risk: "safe",
+    notes: "Confirmed gameplay transport-ship intent with explicit destination tile and troop count.",
   },
   upgrade_structure: {
     actionType: "upgrade_structure",
@@ -419,6 +438,15 @@ export function adaptIntent(
         troops: action.troops,
       };
 
+    case "send_boat":
+      assertFiniteNumber("destinationTile", action.destinationTile);
+      assertNonNegativeNumber("troops", action.troops);
+      return {
+        type: "boat",
+        dst: action.destinationTile,
+        troops: action.troops,
+      };
+
     case "upgrade_structure":
       assertNonEmptyString("unit", action.unit);
       assertFiniteNumber("unitId", action.unitId);
@@ -524,6 +552,14 @@ function assertNullableNonNegativeNumber(
   if (!Number.isFinite(value) || value < 0) {
     throw new IntentAdapterError(
       `IntentAdapter expected ${label} to be null or a non-negative finite number, got ${String(value)}`,
+    );
+  }
+}
+
+function assertNonNegativeNumber(label: string, value: number): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new IntentAdapterError(
+      `IntentAdapter expected ${label} to be a non-negative finite number, got ${String(value)}`,
     );
   }
 }

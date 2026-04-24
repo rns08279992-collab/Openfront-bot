@@ -19,6 +19,7 @@ type GoldLike = bigint | number | string;
 type TileRefLike = number;
 type MaybePromise<T> = T | Promise<T>;
 type ObservationPlayerType = "BOT" | "HUMAN" | "NATION" | string;
+const TRANSPORT_SHIP_UNIT_TYPE = "Transport";
 
 export interface ObservationTilePosition {
   tileRef: TileRefLike;
@@ -185,6 +186,11 @@ export interface ObservationExpansionCandidate {
   supportCount: number;
 }
 
+export interface ObservationBoatCandidate {
+  tile: ObservationTilePosition;
+  sourceTileRef: TileRefLike | null;
+}
+
 export interface ObservationAllianceSnapshot {
   allianceId: number;
   otherPlayerId: ProtocolId;
@@ -262,6 +268,7 @@ export interface Observation {
   configSnapshot: ObservationConfigSnapshot;
   spawn: ObservationSpawnState;
   frontiers: ObservationFrontiers | null;
+  boatTargets: ObservationBoatCandidate[];
   diplomacy: ObservationDiplomacyState | null;
   visibleUnits: ObservationVisibleEntity[];
   visibleStructures: ObservationVisibleEntity[];
@@ -326,6 +333,11 @@ export interface ObservationPlayerLike {
   hasEmbargoAgainst(other: ObservationPlayerLike): boolean;
   isRequestingAllianceWith?(other: ObservationPlayerLike): boolean;
   units(...types: UnitTypeName[]): ObservationUnitLike[];
+  canBuild?(
+    type: UnitTypeName,
+    targetTile: TileRefLike,
+    validTiles?: TileRefLike[] | null,
+  ): TileRefLike | false;
   borderTiles?(): MaybePromise<ObservationBorderTilesLike>;
 }
 
@@ -435,6 +447,7 @@ export async function normalizeObservation(
     configSnapshot: normalizeConfigSnapshot(config, rawGameConfig),
     spawn: normalizeSpawnState(game, myPlayer),
     frontiers: myPlayer ? await normalizeFrontiers(game, myPlayer) : null,
+    boatTargets: myPlayer ? normalizeBoatTargets(game, myPlayer, allEntities) : [],
     diplomacy: myPlayer ? normalizeDiplomacy(myPlayer, players) : null,
     visibleUnits: allEntities.filter((entity) => !isStructureEntity(game, entity)),
     visibleStructures: allEntities.filter((entity) =>
@@ -897,6 +910,64 @@ function normalizeDiplomacy(
       theyTargetMe: other.targets().some((target) => target.id() === myPlayer.id()),
     })),
   };
+}
+
+function normalizeBoatTargets(
+  game: ObservationGameLike,
+  player: ObservationPlayerLike,
+  entities: readonly ObservationVisibleEntity[],
+): ObservationBoatCandidate[] {
+  if (
+    !player.hasSpawned() ||
+    typeof game.isLand !== "function" ||
+    typeof game.owner !== "function"
+  ) {
+    return [];
+  }
+
+  const candidateTileRefs = new Set<TileRefLike>();
+  for (const entity of entities) {
+    if (entity.ownerPlayerId === player.id()) {
+      continue;
+    }
+    if (!game.isLand(entity.position.tileRef)) {
+      continue;
+    }
+    candidateTileRefs.add(entity.position.tileRef);
+  }
+
+  const validCandidates: ObservationBoatCandidate[] = [];
+  for (const tileRef of sortNumbers(candidateTileRefs)) {
+    try {
+      const sourceTileRef = canBuildTransportShip(player, tileRef);
+      if (sourceTileRef === false) {
+        continue;
+      }
+      validCandidates.push({
+        tile: normalizeTilePosition(game, tileRef),
+        sourceTileRef,
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return validCandidates;
+}
+
+function canBuildTransportShip(
+  player: ObservationPlayerLike,
+  tileRef: TileRefLike,
+): TileRefLike | false {
+  if (typeof player.canBuild !== "function") {
+    return false;
+  }
+
+  try {
+    return player.canBuild(TRANSPORT_SHIP_UNIT_TYPE, tileRef);
+  } catch {
+    return false;
+  }
 }
 
 function normalizeVisibleEntity(

@@ -52,8 +52,35 @@ interface EvalMatchResult {
   win: boolean;
   finalTick: number | null;
   finalLandShare: number | null;
+  finalObservedTilesOwned: number | null;
+  finalCountedTilesOwned: number | null;
+  maxOwnershipMismatchDelta: number;
+  ownershipMismatchSamples: EvalOwnershipMismatchSample[];
+  expansionConfirmed: boolean;
   finalGold: string | null;
   finalTroops: number | null;
+}
+
+interface EvalOwnershipMismatchSample {
+  observedTilesOwned: number;
+  countedOwnedTiles: number;
+  delta: number;
+  tick: number;
+  consecutiveMismatchCount: number;
+}
+
+interface EvalMatchTelemetry {
+  finalObservedTilesOwned: number | null;
+  finalCountedTilesOwned: number | null;
+  maxOwnershipMismatchDelta: number;
+  ownershipMismatchSamples: EvalOwnershipMismatchSample[];
+  expansionConfirmed: boolean;
+}
+
+interface EvalOwnedTileScan {
+  observedTilesOwned: number;
+  countedOwnedTiles: number | null;
+  delta: number | null;
 }
 
 interface EvalSessionSummary {
@@ -82,10 +109,6 @@ interface EvalSinglePlayerModal extends HTMLElement {
   open(): void;
   close(): void;
   startGame(): Promise<void>;
-}
-
-interface EvalDevHandle {
-  setGameSpeed?(speed: number): number;
 }
 
 interface EvalRuntimeHandle {
@@ -165,13 +188,33 @@ class LocalEvalRunner {
 
     const runtime = await this.waitForRuntime();
     this.setSpeed();
-
     const startedAtMs = Date.now();
     const startedAtIso = new Date(startedAtMs).toISOString();
     const startedGameId = runtime.gameView.gameID?.() ?? null;
     let latestObservation = await buildObservation(runtime.gameView);
+    console.info("[openfront-bot-eval] started match config", {
+      gameId: startedGameId,
+      requestedSpeed: this.config.speed,
+      requestedBots: this.config.bots,
+      observedBots: latestObservation.configSnapshot.rawGameConfig.bots,
+      observedNations: latestObservation.configSnapshot.rawGameConfig.nations,
+      configuredDifficulty: this.resolveDifficulty(),
+      observedDifficulty: latestObservation.configSnapshot.rawGameConfig.difficulty,
+      randomSpawn: latestObservation.configSnapshot.rawGameConfig.randomSpawn,
+    });
     let missingRuntimePolls = 0;
     let lastObservedTick = latestObservation.game.tick;
+    let lastObservedTilesOwned = latestObservation.ownPlayer?.tilesOwned ?? null;
+    let lastCountedTilesOwned = scanOwnedTiles(runtime.gameView, latestObservation)
+      .countedOwnedTiles;
+    let highestOwnedTilesSeen = Math.max(
+      lastObservedTilesOwned ?? 0,
+      lastCountedTilesOwned ?? 0,
+    );
+    let expansionConfirmed = false;
+    let maxOwnershipMismatchDelta = 0;
+    let consecutiveOwnershipMismatchCount = 0;
+    const ownershipMismatchSamples: EvalOwnershipMismatchSample[] = [];
 
     try {
       while (Date.now() - startedAtMs < this.config.timeoutMs) {
@@ -196,6 +239,13 @@ class LocalEvalRunner {
               startedAtMs,
               latestObservation,
               resolution,
+              {
+                finalObservedTilesOwned: latestObservation.ownPlayer?.tilesOwned ?? null,
+                finalCountedTilesOwned: lastCountedTilesOwned,
+                maxOwnershipMismatchDelta,
+                ownershipMismatchSamples,
+                expansionConfirmed,
+              },
             );
           }
           await sleep(this.config.pollMs);
@@ -204,6 +254,68 @@ class LocalEvalRunner {
 
         missingRuntimePolls = 0;
         latestObservation = await buildObservation(latestRuntime.gameView);
+        const tickAdvanced = latestObservation.game.tick > lastObservedTick;
+        const ownedTileScan = scanOwnedTiles(latestRuntime.gameView, latestObservation);
+        const currentBestOwnedTiles = Math.max(
+          ownedTileScan.observedTilesOwned,
+          ownedTileScan.countedOwnedTiles ?? 0,
+        );
+        if (currentBestOwnedTiles > highestOwnedTilesSeen) {
+          expansionConfirmed = true;
+          highestOwnedTilesSeen = currentBestOwnedTiles;
+        }
+
+        const ownershipMismatch = evaluateOwnershipMismatch({
+          ownedTileScan,
+          tick: latestObservation.game.tick,
+          tickAdvanced,
+          previousBestOwnedTiles: Math.max(
+            lastObservedTilesOwned ?? 0,
+            lastCountedTilesOwned ?? 0,
+          ),
+          consecutiveMismatchCount: consecutiveOwnershipMismatchCount,
+        });
+        consecutiveOwnershipMismatchCount =
+          ownershipMismatch.consecutiveMismatchCount;
+        if (ownershipMismatch.sample) {
+          ownershipMismatchSamples.push(ownershipMismatch.sample);
+          maxOwnershipMismatchDelta = Math.max(
+            maxOwnershipMismatchDelta,
+            Math.abs(ownershipMismatch.sample.delta),
+          );
+        }
+        if (ownershipMismatch.expansionEvidence) {
+          expansionConfirmed = true;
+        }
+        if (ownershipMismatch.shouldInvalidate) {
+          const resolution: EvalResolution = {
+            outcome: "invalid",
+            reason: `owned_tile_count_mismatch:${ownedTileScan.observedTilesOwned}->${ownedTileScan.countedOwnedTiles}`,
+          };
+          console.info("[openfront-bot-eval] match finished", {
+            matchIndex,
+            outcome: resolution.outcome,
+            reason: resolution.reason,
+            ownershipMismatch: ownershipMismatch.sample,
+          });
+          return finalizeResult(
+            matchIndex,
+            this.config.profile,
+            this.resolveDifficulty(),
+            startedAtIso,
+            startedAtMs,
+            latestObservation,
+            resolution,
+            {
+              finalObservedTilesOwned: ownedTileScan.observedTilesOwned,
+              finalCountedTilesOwned: ownedTileScan.countedOwnedTiles,
+              maxOwnershipMismatchDelta,
+              ownershipMismatchSamples,
+              expansionConfirmed,
+            },
+          );
+        }
+
         const resolution = resolveOutcome(
           latestRuntime.gameView,
           latestObservation,
@@ -211,6 +323,8 @@ class LocalEvalRunner {
           lastObservedTick,
         );
         lastObservedTick = latestObservation.game.tick;
+        lastObservedTilesOwned = ownedTileScan.observedTilesOwned;
+        lastCountedTilesOwned = ownedTileScan.countedOwnedTiles;
         if (resolution !== null) {
           console.info("[openfront-bot-eval] match finished", {
             matchIndex,
@@ -225,6 +339,13 @@ class LocalEvalRunner {
             startedAtMs,
             latestObservation,
             resolution,
+            {
+              finalObservedTilesOwned: ownedTileScan.observedTilesOwned,
+              finalCountedTilesOwned: ownedTileScan.countedOwnedTiles,
+              maxOwnershipMismatchDelta,
+              ownershipMismatchSamples,
+              expansionConfirmed,
+            },
           );
         }
 
@@ -241,6 +362,13 @@ class LocalEvalRunner {
         {
           outcome: "timeout",
           reason: "match_timeout_elapsed",
+        },
+        {
+          finalObservedTilesOwned: latestObservation.ownPlayer?.tilesOwned ?? null,
+          finalCountedTilesOwned: lastCountedTilesOwned,
+          maxOwnershipMismatchDelta,
+          ownershipMismatchSamples,
+          expansionConfirmed,
         },
       );
     } finally {
@@ -368,7 +496,7 @@ class LocalEvalRunner {
 
   private setSpeed(): void {
     const devHandle = (globalThis as Record<string, unknown>).__OPENFRONT_BOT_DEV__ as
-      | EvalDevHandle
+      | { setGameSpeed?(speed: number): number }
       | undefined;
     devHandle?.setGameSpeed?.(this.config.speed);
   }
@@ -734,14 +862,6 @@ function resolveOutcome(
     };
   }
 
-  const tileOwnershipMismatch = detectTileOwnershipMismatch(gameView, observation);
-  if (tileOwnershipMismatch) {
-    return {
-      outcome: "invalid",
-      reason: tileOwnershipMismatch,
-    };
-  }
-
   const winnerUpdate = findWinnerUpdate(gameView);
   if (winnerUpdate?.winner) {
     return {
@@ -785,13 +905,17 @@ function detectClientOwnershipMismatch(observation: Observation): string | null 
   return null;
 }
 
-function detectTileOwnershipMismatch(
+function scanOwnedTiles(
   gameView: unknown,
   observation: Observation,
-): string | null {
+): EvalOwnedTileScan {
   const ownPlayer = observation.ownPlayer;
   if (!ownPlayer || ownPlayer.hasSpawned === false) {
-    return null;
+    return {
+      observedTilesOwned: ownPlayer?.tilesOwned ?? 0,
+      countedOwnedTiles: null,
+      delta: null,
+    };
   }
   if (
     typeof gameView !== "object" ||
@@ -803,7 +927,11 @@ function detectTileOwnershipMismatch(
     typeof (gameView as { hasOwner?: unknown }).hasOwner !== "function" ||
     typeof (gameView as { owner?: unknown }).owner !== "function"
   ) {
-    return null;
+    return {
+      observedTilesOwned: ownPlayer.tilesOwned,
+      countedOwnedTiles: null,
+      delta: null,
+    };
   }
 
   let countedOwnedTiles = 0;
@@ -829,11 +957,59 @@ function detectTileOwnershipMismatch(
     }
   }
 
-  if (countedOwnedTiles !== ownPlayer.tilesOwned) {
-    return `owned_tile_count_mismatch:${ownPlayer.tilesOwned}->${countedOwnedTiles}`;
+  return {
+    observedTilesOwned: ownPlayer.tilesOwned,
+    countedOwnedTiles,
+    delta: countedOwnedTiles - ownPlayer.tilesOwned,
+  };
+}
+
+function evaluateOwnershipMismatch(input: {
+  ownedTileScan: EvalOwnedTileScan;
+  tick: number;
+  tickAdvanced: boolean;
+  previousBestOwnedTiles: number;
+  consecutiveMismatchCount: number;
+}): {
+  consecutiveMismatchCount: number;
+  sample: EvalOwnershipMismatchSample | null;
+  expansionEvidence: boolean;
+  shouldInvalidate: boolean;
+} {
+  const { ownedTileScan, tick, tickAdvanced, previousBestOwnedTiles } = input;
+  if (
+    ownedTileScan.countedOwnedTiles === null ||
+    ownedTileScan.delta === null ||
+    ownedTileScan.delta === 0
+  ) {
+    return {
+      consecutiveMismatchCount: 0,
+      sample: null,
+      expansionEvidence: false,
+      shouldInvalidate: false,
+    };
   }
 
-  return null;
+  const currentBestOwnedTiles = Math.max(
+    ownedTileScan.observedTilesOwned,
+    ownedTileScan.countedOwnedTiles,
+  );
+  const expansionEvidence = currentBestOwnedTiles > previousBestOwnedTiles;
+  const consecutiveMismatchCount = input.consecutiveMismatchCount + 1;
+  const sample: EvalOwnershipMismatchSample = {
+    observedTilesOwned: ownedTileScan.observedTilesOwned,
+    countedOwnedTiles: ownedTileScan.countedOwnedTiles,
+    delta: ownedTileScan.delta,
+    tick,
+    consecutiveMismatchCount,
+  };
+
+  return {
+    consecutiveMismatchCount,
+    sample,
+    expansionEvidence,
+    shouldInvalidate: tickAdvanced && consecutiveMismatchCount >= 3,
+  };
 }
 
 function finalizeResult(
@@ -844,12 +1020,14 @@ function finalizeResult(
   startedAtMs: number,
   observation: Observation,
   resolution: EvalResolution,
+  telemetry: EvalMatchTelemetry,
 ): EvalMatchResult {
   const endedAtMs = Date.now();
   const ownPlayer = observation.ownPlayer;
+  const finalOwnedTiles = telemetry.finalCountedTilesOwned ?? telemetry.finalObservedTilesOwned;
   const finalLandShare =
-    ownPlayer && observation.game.map.landTileCount
-      ? ownPlayer.tilesOwned / observation.game.map.landTileCount
+    finalOwnedTiles !== null && observation.game.map.landTileCount
+      ? finalOwnedTiles / observation.game.map.landTileCount
       : null;
 
   return {
@@ -866,6 +1044,11 @@ function finalizeResult(
     win: resolution.outcome === "win",
     finalTick: observation.game.tick ?? null,
     finalLandShare,
+    finalObservedTilesOwned: telemetry.finalObservedTilesOwned,
+    finalCountedTilesOwned: telemetry.finalCountedTilesOwned,
+    maxOwnershipMismatchDelta: telemetry.maxOwnershipMismatchDelta,
+    ownershipMismatchSamples: telemetry.ownershipMismatchSamples,
+    expansionConfirmed: telemetry.expansionConfirmed,
     finalGold: ownPlayer?.gold ?? null,
     finalTroops: ownPlayer?.troops ?? null,
   };

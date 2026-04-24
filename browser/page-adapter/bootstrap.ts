@@ -317,6 +317,8 @@ function formatAction(action: IntentAdapterAction): string {
       return `spawn_at_tile(tile=${action.tile})`;
     case "attack_player":
       return `attack_player(target=${action.targetPlayerId ?? "auto"}, troops=${action.troops ?? "default"})`;
+    case "send_boat":
+      return `send_boat(dst=${action.destinationTile}, troops=${action.troops})`;
     case "request_alliance":
       return `request_alliance(recipient=${action.recipientPlayerId})`;
     case "break_alliance":
