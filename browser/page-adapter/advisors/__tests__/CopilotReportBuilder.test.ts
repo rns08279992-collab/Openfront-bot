@@ -227,6 +227,64 @@ describe("buildCopilotReport", () => {
     expect(report.nextBestReadOnlyRecommendation.summary).toContain("port");
   });
 
+  it("surfaces trade when growth, combat, and enclosure are not urgent", () => {
+    const report = buildCopilotReport(
+      makeObservation({
+        diplomacy: {
+          allyPlayerIds: [],
+          targetPlayerIds: [],
+          outgoingAllianceRequestPlayerIds: [],
+          embargoedPlayerIds: [],
+          embargoedByPlayerIds: [],
+          activeAlliances: [],
+          players: [
+            makeDiplomacyPlayer("ALLY0001", {
+              displayName: "Friendly Port",
+              isFriendlyToMe: true,
+            }),
+          ],
+        },
+        visibleStructures: [
+          {
+            id: 2,
+            type: "Port",
+            ownerPlayerId: "ALLY0001",
+            ownerSmallID: 2,
+            position: makeTile(89, 9, 8),
+            troops: 0,
+            level: 3,
+            health: null,
+            isActive: true,
+            isUnderConstruction: false,
+            isTargetable: null,
+            reachedTarget: null,
+            targetTile: null,
+            markedForDeletionAtTick: null,
+            hasTrainStation: false,
+            trainType: null,
+            isLoaded: null,
+          },
+        ],
+      }),
+      makeStrategyState({
+        localThreatBand: "low",
+        localThreatScore: 10,
+        recommendedAttackPosture: "avoid",
+        safeAttackWindowActive: false,
+        safeAttackWindowScore: 20,
+      }),
+    );
+
+    expect(report.growthTempo.urgency).not.toBe("high");
+    expect(report.growthTempo.urgency).not.toBe("critical");
+    expect(report.attackAssessments).toHaveLength(0);
+    expect(
+      report.enclosureOpportunities.every((opportunity) => opportunity.status === "none"),
+    ).toBe(true);
+    expect(report.tradeAllianceROI.recommendation).toBe("build_port");
+    expect(report.nextBestReadOnlyRecommendation.category).toBe("trade");
+  });
+
   it("preserves unknown fallback when observation is too incomplete", () => {
     const report = buildCopilotReport(
       makeObservation({
