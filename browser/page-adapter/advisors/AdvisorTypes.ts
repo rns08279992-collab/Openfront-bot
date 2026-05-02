@@ -148,3 +148,36 @@ export interface TradeAllianceROIAdvisorResult {
   reasons: string[];
   warnings: string[];
 }
+
+export type CopilotReportRecommendationCategory =
+  | "growth"
+  | "attack"
+  | "enclosure"
+  | "trade"
+  | "defense"
+  | "unknown";
+
+export type CopilotReportRecommendationPriority =
+  | "low"
+  | "medium"
+  | "high"
+  | "critical"
+  | "unknown";
+
+export interface CopilotReadOnlyRecommendation {
+  category: CopilotReportRecommendationCategory;
+  priority: CopilotReportRecommendationPriority;
+  summary: string;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface CopilotReport {
+  terrainCostMap: TerrainCostMapResult;
+  attackAssessments: AttackMathAssessment[];
+  enclosureOpportunities: EnclosureOpportunityAssessment[];
+  growthTempo: GrowthTempoAssessment;
+  tradeAllianceROI: TradeAllianceROIAdvisorResult;
+  topWarnings: string[];
+  nextBestReadOnlyRecommendation: CopilotReadOnlyRecommendation;
+}
