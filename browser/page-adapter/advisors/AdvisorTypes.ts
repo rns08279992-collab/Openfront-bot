@@ -1,0 +1,60 @@
+import type { Observation, ObservationTilePosition } from "../ObservationAdapter";
+import type { FormulaRegistryEntry } from "../formulas/FormulaRegistry";
+import type { StrategyState } from "../../../shared/interpreter/strategy-state";
+import type { ProtocolId } from "../../../shared/protocol/intents";
+
+export type AdvisorConfidence = "verified" | "partial" | "unknown";
+
+export type AttackAdviceMode =
+  | "no_attack"
+  | "poke"
+  | "limited"
+  | "breakthrough"
+  | "full_send_candidate";
+
+export type AttackRiskBand = "unknown" | "low" | "medium" | "high" | "extreme";
+
+export interface TerrainCostEstimate {
+  tileRef: number;
+  ownerPlayerId: ProtocolId | null;
+  terrainMultiplier: number | null;
+  defensePostCoverageMultiplier: number | null;
+  botTraitorModifier: number | null;
+  largeAttackerModifier: number | null;
+  largeDefenderModifier: number | null;
+  troopRatioFactor: number | null;
+  estimatedAttackerLossPerTile: number | null;
+  estimatedDefenderLossPerTile: number | null;
+  confidence: AdvisorConfidence;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface TerrainCostMapResult {
+  tiles: TerrainCostEstimate[];
+  warnings: string[];
+  formulas: string[];
+}
+
+export interface AttackMathAssessment {
+  targetPlayerId: ProtocolId;
+  mode: AttackAdviceMode;
+  recommendedTroops: number | null;
+  minimumReserve: number | null;
+  troopRatioFactor: number | null;
+  effectiveAttackCost: number | null;
+  defenderBleedRate: number | null;
+  expectedRiskBand: AttackRiskBand;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface AttackMathContext {
+  observation: Observation;
+  strategyState?: StrategyState | null;
+  formulas?: readonly FormulaRegistryEntry[];
+}
+
+export interface TilePositionIndex {
+  get(tileRef: number): ObservationTilePosition | null;
+}
