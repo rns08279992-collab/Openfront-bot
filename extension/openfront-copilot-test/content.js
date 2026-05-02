@@ -6,19 +6,61 @@
   const state = {
     bridgeLoaded: false,
     runtimeFound: false,
-    runtimeSource: null
+    runtimeSource: null,
+    latestDiscovery: null
   };
 
-  function getOverlayText() {
+  function getOverlayLines() {
+    const discovery = state.latestDiscovery;
+    const pageState = discovery ? discovery.pageState || {} : {};
+
     return [
-      "OpenFront Copilot Test",
       "extension loaded",
       state.bridgeLoaded ? "page bridge loaded" : "page bridge loading",
-      state.runtimeFound ? "runtime found" : "runtime not found",
+      `runtime: ${state.runtimeFound ? "found" : "not found"}`,
+      `globals: ${discovery ? discovery.candidateGlobalKeys.length : 0}`,
+      `custom tags: ${discovery ? discovery.customElements.length : 0}`,
+      `canvas: ${discovery ? discovery.canvasCount : 0}`,
+      `scripts: ${discovery ? discovery.scriptSourceHints.length : 0}`,
+      `path: ${pageState.pathname || window.location.pathname}`,
       `runtime source: ${state.runtimeSource || "none"}`,
       "mode: read-only",
       "no actions enabled"
-    ].join("\n");
+    ];
+  }
+
+  function getDiscoveryJson() {
+    return JSON.stringify(
+      state.latestDiscovery || {
+        runtimeFound: state.runtimeFound,
+        runtimeSource: state.runtimeSource
+      },
+      null,
+      2
+    );
+  }
+
+  function copyDiscoveryJson(button) {
+    const discoveryJson = getDiscoveryJson();
+    const onSuccess = function () {
+      button.textContent = "copied";
+      window.setTimeout(() => {
+        button.textContent = "copy discovery JSON";
+      }, 1200);
+    };
+    const onFailure = function () {
+      button.textContent = "copy failed";
+      window.setTimeout(() => {
+        button.textContent = "copy discovery JSON";
+      }, 1200);
+    };
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(discoveryJson).then(onSuccess).catch(onFailure);
+      return;
+    }
+
+    onFailure();
   }
 
   function ensureOverlay() {
@@ -43,12 +85,47 @@
       overlay.style.color = "#f8fafc";
       overlay.style.font = '12px/1.4 ui-monospace, "SFMono-Regular", Consolas, monospace';
       overlay.style.boxShadow = "0 8px 24px rgba(15, 23, 42, 0.35)";
-      overlay.style.pointerEvents = "none";
-      overlay.style.whiteSpace = "pre-line";
+      overlay.style.pointerEvents = "auto";
+      overlay.style.minWidth = "220px";
       document.body.appendChild(overlay);
+
+      const title = document.createElement("div");
+      title.textContent = "OpenFront Copilot Test";
+      title.style.fontWeight = "600";
+      title.style.marginBottom = "6px";
+      overlay.appendChild(title);
+
+      const lines = document.createElement("pre");
+      lines.setAttribute("data-role", "lines");
+      lines.style.margin = "0";
+      lines.style.whiteSpace = "pre-wrap";
+      lines.style.userSelect = "text";
+      overlay.appendChild(lines);
+
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.textContent = "copy discovery JSON";
+      copyButton.style.marginTop = "8px";
+      copyButton.style.padding = "0";
+      copyButton.style.border = "0";
+      copyButton.style.background = "transparent";
+      copyButton.style.color = "#93c5fd";
+      copyButton.style.cursor = "pointer";
+      copyButton.style.font = "inherit";
+      copyButton.style.textDecoration = "underline";
+      copyButton.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        copyDiscoveryJson(copyButton);
+      });
+      overlay.appendChild(copyButton);
     }
 
-    overlay.textContent = getOverlayText();
+    const lines = overlay.querySelector('[data-role="lines"]');
+    if (lines) {
+      lines.textContent = getOverlayLines().join("\n");
+    }
+
     return overlay;
   }
 
@@ -103,6 +180,7 @@
 
     state.runtimeFound = Boolean(data.runtimeFound);
     state.runtimeSource = data.runtimeSource || null;
+    state.latestDiscovery = data.discovery || null;
     renderOverlay();
   });
 
