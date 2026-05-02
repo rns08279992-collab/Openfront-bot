@@ -13,7 +13,9 @@ import type {
 } from "../../shared/protocol/intents";
 
 const PINNED_COMMIT = "52033597efb09de6c8d724f6e2784c3c9e8a7511";
-const OBSERVATION_ADAPTER_VERSION = 3 as const;
+const OBSERVATION_ADAPTER_VERSION = 4 as const;
+const FULL_MAP_TOPOLOGY_TILE_CAP = 1024 as const;
+const BOUNDED_TOPOLOGY_TILE_CAP = 512 as const;
 
 type GoldLike = bigint | number | string;
 type TileRefLike = number;
@@ -25,6 +27,27 @@ export interface ObservationTilePosition {
   tileRef: TileRefLike;
   x: number;
   y: number;
+}
+
+export interface ObservationTopologyTile extends ObservationTilePosition {
+  ownerPlayerId: ProtocolId | null;
+  neighborTileRefs: TileRefLike[];
+  isLand: boolean;
+  isMapEdge: boolean;
+  adjacentLandCount: number;
+  adjacentWaterCount: number;
+  isShoreline: boolean;
+}
+
+export interface ObservationTopology {
+  coverage: "full_map" | "bounded";
+  isPartial: boolean;
+  tileCount: number;
+  candidateTileCount: number;
+  omittedTileCount: number;
+  maxTileCount: number;
+  warnings: string[];
+  tiles: ObservationTopologyTile[];
 }
 
 export interface ObservationPublicGameModifiersSnapshot {
@@ -268,6 +291,7 @@ export interface Observation {
   configSnapshot: ObservationConfigSnapshot;
   spawn: ObservationSpawnState;
   frontiers: ObservationFrontiers | null;
+  topology: ObservationTopology | null;
   boatTargets: ObservationBoatCandidate[];
   diplomacy: ObservationDiplomacyState | null;
   visibleUnits: ObservationVisibleEntity[];
@@ -434,6 +458,18 @@ export async function normalizeObservation(
   const allEntities = sortUnits(game.units()).map((unit) =>
     normalizeVisibleEntity(game, unit),
   );
+  const visibleUnits = allEntities.filter((entity) => !isStructureEntity(game, entity));
+  const visibleStructures = allEntities.filter((entity) =>
+    isStructureEntity(game, entity),
+  );
+  const spawn = normalizeSpawnState(game, myPlayer);
+  const frontiers = myPlayer ? await normalizeFrontiers(game, myPlayer) : null;
+  const topology = normalizeTopology(game, {
+    spawn,
+    frontiers,
+    visibleUnits,
+    visibleStructures,
+  });
 
   return {
     source: {
@@ -445,14 +481,111 @@ export async function normalizeObservation(
     ownPlayer: myPlayer ? normalizeOwnPlayer(myPlayer) : null,
     economy: myPlayer ? normalizeEconomy(config, myPlayer) : null,
     configSnapshot: normalizeConfigSnapshot(config, rawGameConfig),
-    spawn: normalizeSpawnState(game, myPlayer),
-    frontiers: myPlayer ? await normalizeFrontiers(game, myPlayer) : null,
+    spawn,
+    frontiers,
+    topology,
     boatTargets: myPlayer ? normalizeBoatTargets(game, myPlayer, allEntities) : [],
     diplomacy: myPlayer ? normalizeDiplomacy(myPlayer, players) : null,
-    visibleUnits: allEntities.filter((entity) => !isStructureEntity(game, entity)),
-    visibleStructures: allEntities.filter((entity) =>
-      isStructureEntity(game, entity),
-    ),
+    visibleUnits,
+    visibleStructures,
+  };
+}
+
+function normalizeTopology(
+  game: ObservationGameLike,
+  inputs: {
+    spawn: ObservationSpawnState;
+    frontiers: ObservationFrontiers | null;
+    visibleUnits: readonly ObservationVisibleEntity[];
+    visibleStructures: readonly ObservationVisibleEntity[];
+  },
+): ObservationTopology | null {
+  if (typeof game.neighbors !== "function" || typeof game.isLand !== "function") {
+    return null;
+  }
+
+  const fullMapTileCount = game.width() * game.height();
+  if (typeof game.ref === "function" && fullMapTileCount <= FULL_MAP_TOPOLOGY_TILE_CAP) {
+    const tileRefs: TileRefLike[] = [];
+    for (let y = 0; y < game.height(); y++) {
+      for (let x = 0; x < game.width(); x++) {
+        tileRefs.push(game.ref(x, y));
+      }
+    }
+
+    return {
+      coverage: "full_map",
+      isPartial: false,
+      tileCount: tileRefs.length,
+      candidateTileCount: tileRefs.length,
+      omittedTileCount: 0,
+      maxTileCount: FULL_MAP_TOPOLOGY_TILE_CAP,
+      warnings: [],
+      tiles: tileRefs.map((tileRef) => normalizeTopologyTile(game, tileRef)),
+    };
+  }
+
+  const candidateTileRefs = new Set<TileRefLike>();
+  const boundedTileRefs: TileRefLike[] = [];
+
+  addBoundedTileRefs(
+    boundedTileRefs,
+    candidateTileRefs,
+    inputs.frontiers?.ownBorderTileRefs ?? [],
+    BOUNDED_TOPOLOGY_TILE_CAP,
+  );
+  addBoundedTileRefs(
+    boundedTileRefs,
+    candidateTileRefs,
+    inputs.frontiers?.nearbyFrontierTileRefs ?? [],
+    BOUNDED_TOPOLOGY_TILE_CAP,
+  );
+  addBoundedTileRefs(
+    boundedTileRefs,
+    candidateTileRefs,
+    inputs.visibleStructures.map((entity) => entity.position.tileRef),
+    BOUNDED_TOPOLOGY_TILE_CAP,
+  );
+  addBoundedTileRefs(
+    boundedTileRefs,
+    candidateTileRefs,
+    inputs.visibleUnits.map((entity) => entity.position.tileRef),
+    BOUNDED_TOPOLOGY_TILE_CAP,
+  );
+  addBoundedTileRefs(
+    boundedTileRefs,
+    candidateTileRefs,
+    inputs.spawn.legalTileRefs ?? [],
+    BOUNDED_TOPOLOGY_TILE_CAP,
+  );
+
+  const selectedTileRefs = sortNumbers(boundedTileRefs);
+  const omittedTileCount = candidateTileRefs.size - selectedTileRefs.length;
+  const warnings: string[] = [];
+
+  if (fullMapTileCount > FULL_MAP_TOPOLOGY_TILE_CAP) {
+    warnings.push(
+      `full_map_topology_skipped_map_has_${fullMapTileCount}_tiles_cap_${FULL_MAP_TOPOLOGY_TILE_CAP}`,
+    );
+  }
+  if (omittedTileCount > 0) {
+    warnings.push(
+      `bounded_topology_truncated_${omittedTileCount}_tiles_cap_${BOUNDED_TOPOLOGY_TILE_CAP}`,
+    );
+  }
+  if (selectedTileRefs.length === 0) {
+    warnings.push("bounded_topology_no_candidate_tiles");
+  }
+
+  return {
+    coverage: "bounded",
+    isPartial: true,
+    tileCount: selectedTileRefs.length,
+    candidateTileCount: candidateTileRefs.size,
+    omittedTileCount,
+    maxTileCount: BOUNDED_TOPOLOGY_TILE_CAP,
+    warnings,
+    tiles: selectedTileRefs.map((tileRef) => normalizeTopologyTile(game, tileRef)),
   };
 }
 
@@ -1059,6 +1192,57 @@ function normalizeTilePosition(
   };
 }
 
+function normalizeTopologyTile(
+  game: ObservationGameLike,
+  tileRef: TileRefLike,
+): ObservationTopologyTile {
+  const position = normalizeTilePosition(game, tileRef);
+  const neighborTileRefs = sortNumbers(game.neighbors?.(tileRef) ?? []);
+  let adjacentLandCount = 0;
+  let adjacentWaterCount = 0;
+
+  for (const neighborTileRef of neighborTileRefs) {
+    if (game.isLand?.(neighborTileRef)) {
+      adjacentLandCount++;
+    } else {
+      adjacentWaterCount++;
+    }
+  }
+
+  const isLand = game.isLand?.(tileRef) ?? false;
+
+  return {
+    ...position,
+    ownerPlayerId: resolveTileOwnerPlayerId(game, tileRef),
+    neighborTileRefs,
+    isLand,
+    isMapEdge:
+      position.x === 0 ||
+      position.y === 0 ||
+      position.x === game.width() - 1 ||
+      position.y === game.height() - 1,
+    adjacentLandCount,
+    adjacentWaterCount,
+    isShoreline: isLand && adjacentWaterCount > 0,
+  };
+}
+
+function resolveTileOwnerPlayerId(
+  game: ObservationGameLike,
+  tileRef: TileRefLike,
+): ProtocolId | null {
+  if (typeof game.hasOwner !== "function" || typeof game.owner !== "function") {
+    return null;
+  }
+
+  if (!game.hasOwner(tileRef)) {
+    return null;
+  }
+
+  const owner = game.owner(tileRef);
+  return isObservationPlayer(owner) ? owner.id() : null;
+}
+
 function normalizeMarkedForDeletion(value: number | false | undefined): number | null {
   return typeof value === "number" ? value : null;
 }
@@ -1167,6 +1351,24 @@ function sortProtocolIds(ids: Iterable<ProtocolId>): ProtocolId[] {
 
 function sortNumbers(values: Iterable<number>): number[] {
   return [...values].sort((left, right) => left - right);
+}
+
+function addBoundedTileRefs(
+  target: TileRefLike[],
+  candidateTileRefs: Set<TileRefLike>,
+  tileRefs: Iterable<TileRefLike>,
+  cap: number,
+): void {
+  for (const tileRef of sortNumbers(tileRefs)) {
+    if (candidateTileRefs.has(tileRef)) {
+      continue;
+    }
+
+    candidateTileRefs.add(tileRef);
+    if (target.length < cap) {
+      target.push(tileRef);
+    }
+  }
 }
 
 function ensureFrontierContact(

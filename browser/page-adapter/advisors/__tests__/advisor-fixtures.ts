@@ -44,13 +44,14 @@ export function makeObservation(
     diplomacy?: Observation["diplomacy"];
     visibleUnits?: Observation["visibleUnits"];
     visibleStructures?: Observation["visibleStructures"];
+    topology?: Observation["topology"];
     spawnImmunityActive?: boolean;
     nationSpawnImmunityActive?: boolean;
   } = {},
 ): Observation {
   return {
     source: {
-      adapterVersion: 3,
+      adapterVersion: 4,
       pinnedCommit: "52033597efb09de6c8d724f6e2784c3c9e8a7511",
       capturedAtIso: "2026-05-02T00:00:00.000Z",
     },
@@ -167,6 +168,7 @@ export function makeObservation(
       nearbyFrontierTiles: [],
       cheapExpansionCandidates: [],
     },
+    topology: null,
     boatTargets: [],
     diplomacy: {
       allyPlayerIds: [],
