@@ -43,7 +43,9 @@
     const contextSummary = state.latestContextSummary;
     const pageState = discovery ? discovery.pageState || {} : {};
     const playersCount =
-      contextSummary && typeof contextSummary.aliveHumanPlayersCount === "number"
+      contextSummary && typeof contextSummary.playerCount === "number"
+        ? String(contextSummary.playerCount)
+        : contextSummary && typeof contextSummary.aliveHumanPlayersCount === "number"
         ? String(contextSummary.aliveHumanPlayersCount)
         : "unknown";
 
@@ -90,6 +92,19 @@
   function copyContextJson(button) {
     const contextJson = getContextJson();
     copyJsonText(button, contextJson, "copy context JSON");
+  }
+
+  function getDomProbeJson() {
+    const domProbe =
+      state.latestDiscovery && state.latestDiscovery.domProbe
+        ? state.latestDiscovery.domProbe
+        : {};
+    return JSON.stringify(domProbe, null, 2);
+  }
+
+  function copyDomProbeJson(button) {
+    const domProbeJson = getDomProbeJson();
+    copyJsonText(button, domProbeJson, "copy DOM probe JSON");
   }
 
   function copyJsonText(button, text, idleLabel) {
@@ -189,6 +204,25 @@
         copyContextJson(copyContextButton);
       });
       overlay.appendChild(copyContextButton);
+
+      const copyDomProbeButton = document.createElement("button");
+      copyDomProbeButton.type = "button";
+      copyDomProbeButton.textContent = "copy DOM probe JSON";
+      copyDomProbeButton.style.display = "block";
+      copyDomProbeButton.style.marginTop = "6px";
+      copyDomProbeButton.style.padding = "0";
+      copyDomProbeButton.style.border = "0";
+      copyDomProbeButton.style.background = "transparent";
+      copyDomProbeButton.style.color = "#93c5fd";
+      copyDomProbeButton.style.cursor = "pointer";
+      copyDomProbeButton.style.font = "inherit";
+      copyDomProbeButton.style.textDecoration = "underline";
+      copyDomProbeButton.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        copyDomProbeJson(copyDomProbeButton);
+      });
+      overlay.appendChild(copyDomProbeButton);
     }
 
     const lines = overlay.querySelector('[data-role="lines"]');

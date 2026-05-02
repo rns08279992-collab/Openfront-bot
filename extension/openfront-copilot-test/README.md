@@ -36,6 +36,7 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `no actions enabled`
   - `copy discovery JSON`
   - `copy context JSON`
+  - `copy DOM probe JSON`
 - Injects `page-probe.js` into the page world through `chrome.runtime.getURL(...)`
 - Activates on every matched OpenFront or localhost route without requiring a query parameter
 - Polls once per second for these known runtime globals without mutating them:
@@ -44,6 +45,47 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `globalThis.__OPENFRONT_CLIENT_GAME_RUNNER__`
   - `globalThis.currentGameRunner`
 - Collects additional read-only discovery data:
+  - `domProbe`
+    - scans these selectors directly:
+      - `player-info-overlay`
+      - `player-panel`
+      - `emoji-table`
+      - `leader-board`
+      - `team-stats`
+      - `game-left-sidebar`
+      - `game-right-sidebar`
+      - `build-menu`
+      - `spawn-timer`
+      - `unit-display`
+      - `control-panel`
+      - `canvas`
+      - `map-display`
+      - `single-player-modal`
+      - `host-lobby-modal`
+      - `game-starting-modal`
+      - `game-info-modal`
+    - also scans all DOM elements for property names:
+      - `game`
+      - `g`
+      - `transform`
+      - `transformHandler`
+    - records for each candidate element:
+      - `tagName`
+      - `id`
+      - `className`
+      - `ownPropertyNames`
+      - `prototypePropertyNames`
+      - `hasGameProperty`
+      - `hasGProperty`
+      - `hasTransformProperty`
+      - `hasTransformHandlerProperty`
+      - `gameSummary`
+      - `transformSummary`
+    - marks a usable DOM context when a candidate game object exposes `playerViews()` and a candidate transform exposes `worldToScreenCoordinates()`
+    - only then makes these guarded read-only calls once on the first usable pair:
+      - `game.playerViews()`
+      - `game.myPlayer()`
+      - `game.ticks()`
   - `candidateGlobalKeys`
     - `Object.keys(globalThis)` filtered for keys containing `openfront`, `game`, `runner`, `client`, `lobby`, `map`, or `player`
     - limited to the first 30 matches
@@ -90,6 +132,12 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
     - `document.body.children.length`
 - Builds a compact read-only `contextSummary` from the safe call results:
   - `contextFound`
+  - `sourceElementTag`
+  - `gameSourceProperty`
+  - `transformSourceProperty`
+  - `playerCount`
+  - `myPlayerFound`
+  - `currentTick`
   - `contextKeys`
   - `gameConfigFound`
   - `gameConfigKeys`
@@ -112,6 +160,7 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
 - Click `copy discovery JSON` in the overlay to copy the latest discovery snapshot to the clipboard.
 - The copy payload is read-only JSON from the most recent page probe result.
 - Click `copy context JSON` to copy the compact safe-call context summary.
+- Click `copy DOM probe JSON` to copy the element/property scan and any usable DOM-derived context metadata.
 
 ## What it does not do
 

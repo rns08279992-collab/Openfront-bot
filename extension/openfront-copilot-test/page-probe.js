@@ -1,6 +1,31 @@
 (function () {
   const PROBE_MESSAGE_TYPE = "OPENFRONT_COPILOT_RUNTIME_STATUS";
   const POLL_INTERVAL_MS = 1000;
+  const DOM_SELECTORS_TO_SCAN = [
+    "player-info-overlay",
+    "player-panel",
+    "emoji-table",
+    "leader-board",
+    "team-stats",
+    "game-left-sidebar",
+    "game-right-sidebar",
+    "build-menu",
+    "spawn-timer",
+    "unit-display",
+    "control-panel",
+    "canvas",
+    "map-display",
+    "single-player-modal",
+    "host-lobby-modal",
+    "game-starting-modal",
+    "game-info-modal"
+  ];
+  const DOM_PROPERTY_NAMES = [
+    "game",
+    "g",
+    "transform",
+    "transformHandler"
+  ];
   const GLOBAL_NAMES = [
     "__OPENFRONT_BOT_RUNTIME__",
     "__OPENFRONT_RUNTIME__",
@@ -116,6 +141,264 @@
     }
 
     return summary;
+  }
+
+  function limitArray(values, maxItems) {
+    return Array.isArray(values) ? values.slice(0, maxItems) : [];
+  }
+
+  function getElementId(element) {
+    return typeof element.id === "string" ? element.id : "";
+  }
+
+  function getElementClassName(element) {
+    const className = element.className;
+
+    if (typeof className === "string") {
+      return className;
+    }
+
+    if (className && typeof className.baseVal === "string") {
+      return className.baseVal;
+    }
+
+    return "";
+  }
+
+  function getPrototypePropertyNames(value) {
+    if (!value || (typeof value !== "object" && typeof value !== "function")) {
+      return [];
+    }
+
+    try {
+      const prototype = Object.getPrototypeOf(value);
+      return prototype ? Object.getOwnPropertyNames(prototype).slice(0, 50) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function hasProperty(value, name) {
+    if (!value || (typeof value !== "object" && typeof value !== "function")) {
+      return false;
+    }
+
+    try {
+      return name in value;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function readProperty(value, name) {
+    if (!hasProperty(value, name)) {
+      return undefined;
+    }
+
+    try {
+      return value[name];
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  function summarizeGameCandidate(game) {
+    if (!game || (typeof game !== "object" && typeof game !== "function")) {
+      return null;
+    }
+
+    return {
+      typeName: getTypeName(game),
+      keys: limitKeys(game, 30),
+      hasPlayerViews: typeof readProperty(game, "playerViews") === "function",
+      hasMyPlayer: typeof readProperty(game, "myPlayer") === "function",
+      hasTicks: typeof readProperty(game, "ticks") === "function",
+      hasConfig: hasProperty(game, "config")
+    };
+  }
+
+  function summarizeTransformCandidate(transform) {
+    if (
+      !transform ||
+      (typeof transform !== "object" && typeof transform !== "function")
+    ) {
+      return null;
+    }
+
+    return {
+      typeName: getTypeName(transform),
+      keys: limitKeys(transform, 30),
+      hasWorldToScreenCoordinates:
+        typeof readProperty(transform, "worldToScreenCoordinates") === "function",
+      hasScreenToWorldCoordinates:
+        typeof readProperty(transform, "screenToWorldCoordinates") === "function"
+    };
+  }
+
+  function selectPreferredProperty(element, propertyNames) {
+    for (const name of propertyNames) {
+      if (hasProperty(element, name)) {
+        return {
+          name,
+          value: readProperty(element, name)
+        };
+      }
+    }
+
+    return null;
+  }
+
+  function buildElementProbeEntry(element, scanReason) {
+    const ownPropertyNames = (() => {
+      try {
+        return Object.getOwnPropertyNames(element).slice(0, 50);
+      } catch (error) {
+        return [];
+      }
+    })();
+    const prototypePropertyNames = getPrototypePropertyNames(element);
+    const selectedGameProperty = selectPreferredProperty(element, ["game", "g"]);
+    const selectedTransformProperty = selectPreferredProperty(element, [
+      "transform",
+      "transformHandler"
+    ]);
+
+    return {
+      scanReason,
+      tagName: String(element.tagName || "").toLowerCase(),
+      id: getElementId(element),
+      className: getElementClassName(element),
+      ownPropertyNames,
+      prototypePropertyNames,
+      hasGameProperty: hasProperty(element, "game"),
+      hasGProperty: hasProperty(element, "g"),
+      hasTransformProperty: hasProperty(element, "transform"),
+      hasTransformHandlerProperty: hasProperty(element, "transformHandler"),
+      gameSummary: selectedGameProperty
+        ? summarizeGameCandidate(selectedGameProperty.value)
+        : null,
+      transformSummary: selectedTransformProperty
+        ? summarizeTransformCandidate(selectedTransformProperty.value)
+        : null,
+      gameSourceProperty: selectedGameProperty ? selectedGameProperty.name : null,
+      transformSourceProperty: selectedTransformProperty
+        ? selectedTransformProperty.name
+        : null
+    };
+  }
+
+  function collectDomProbe() {
+    const candidateElements = [];
+    const seenElements = new Set();
+
+    for (const selector of DOM_SELECTORS_TO_SCAN) {
+      const elements = document.querySelectorAll(selector);
+      for (const element of elements) {
+        if (seenElements.has(element)) {
+          continue;
+        }
+
+        seenElements.add(element);
+        candidateElements.push({
+          element,
+          scanReason: `selector:${selector}`
+        });
+      }
+    }
+
+    const allElements = document.querySelectorAll("*");
+    for (const element of allElements) {
+      if (
+        !DOM_PROPERTY_NAMES.some((name) => hasProperty(element, name)) ||
+        seenElements.has(element)
+      ) {
+        continue;
+      }
+
+      seenElements.add(element);
+      candidateElements.push({
+        element,
+        scanReason: "property-scan"
+      });
+    }
+
+    const elements = candidateElements.map(({ element, scanReason }) =>
+      buildElementProbeEntry(element, scanReason)
+    );
+    const usablePair = {
+      contextFound: false,
+      sourceElementTag: null,
+      gameSourceProperty: null,
+      transformSourceProperty: null,
+      playerCount: null,
+      myPlayerFound: false,
+      currentTick: null,
+      errors: []
+    };
+
+    for (const candidate of candidateElements) {
+      const gameCandidate = selectPreferredProperty(candidate.element, ["game", "g"]);
+      const transformCandidate = selectPreferredProperty(candidate.element, [
+        "transform",
+        "transformHandler"
+      ]);
+      const game = gameCandidate ? gameCandidate.value : null;
+      const transform = transformCandidate ? transformCandidate.value : null;
+      const hasUsableGame =
+        game && typeof readProperty(game, "playerViews") === "function";
+      const hasUsableTransform =
+        transform &&
+        typeof readProperty(transform, "worldToScreenCoordinates") === "function";
+
+      if (!hasUsableGame || !hasUsableTransform) {
+        continue;
+      }
+
+      usablePair.contextFound = true;
+      usablePair.sourceElementTag = String(candidate.element.tagName || "").toLowerCase();
+      usablePair.gameSourceProperty = gameCandidate ? gameCandidate.name : null;
+      usablePair.transformSourceProperty = transformCandidate
+        ? transformCandidate.name
+        : null;
+
+      try {
+        const playerViews = game.playerViews();
+        usablePair.playerCount = Array.isArray(playerViews) ? playerViews.length : null;
+      } catch (error) {
+        usablePair.errors.push({
+          name: "playerViews",
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      try {
+        usablePair.myPlayerFound = Boolean(game.myPlayer && game.myPlayer());
+      } catch (error) {
+        usablePair.errors.push({
+          name: "myPlayer",
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      try {
+        usablePair.currentTick = game.ticks ? game.ticks() : null;
+      } catch (error) {
+        usablePair.errors.push({
+          name: "ticks",
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      break;
+    }
+
+    return {
+      selectorsScanned: DOM_SELECTORS_TO_SCAN,
+      propertyNamesScanned: DOM_PROPERTY_NAMES,
+      candidateCount: elements.length,
+      elements,
+      usablePair
+    };
   }
 
   function collectCandidateGlobalKeys() {
@@ -239,7 +522,7 @@
     }
   }
 
-  function buildContextSummary(callResults) {
+  function buildContextSummary(callResults, domProbe) {
     const resultMap = {};
 
     for (const result of callResults) {
@@ -258,12 +541,29 @@
     const contextValue = contextResult && contextResult.called ? contextResult.result : null;
     const configValue = configResult && configResult.called ? configResult.result : null;
     const playersValue = playersResult && playersResult.called ? playersResult.result : null;
+    const domContext = domProbe && domProbe.usablePair ? domProbe.usablePair : null;
 
     return {
-      contextFound: Boolean(contextValue),
+      contextFound: Boolean((domContext && domContext.contextFound) || contextValue),
       contextKeys: limitKeys(contextValue, 50),
       gameConfigFound: Boolean(configValue),
       gameConfigKeys: limitKeys(configValue, 50),
+      sourceElementTag:
+        domContext && domContext.contextFound ? domContext.sourceElementTag : null,
+      gameSourceProperty:
+        domContext && domContext.contextFound ? domContext.gameSourceProperty : null,
+      transformSourceProperty:
+        domContext && domContext.contextFound
+          ? domContext.transformSourceProperty
+          : null,
+      playerCount:
+        domContext && typeof domContext.playerCount === "number"
+          ? domContext.playerCount
+          : null,
+      myPlayerFound:
+        domContext && domContext.contextFound ? domContext.myPlayerFound : false,
+      currentTick:
+        domContext && domContext.contextFound ? domContext.currentTick : null,
       aliveHumanPlayersCount: Array.isArray(playersValue) ? playersValue.length : null,
       aliveHumanPlayerKeySample:
         Array.isArray(playersValue) &&
@@ -288,6 +588,7 @@
           name: result.name,
           error: result.error
         }))
+        .concat(limitArray(domContext ? domContext.errors : [], 20))
     };
   }
 
@@ -302,7 +603,8 @@
     const scriptSourceHints = collectScriptSourceHints();
     const functionInventory = getFunctionInventory();
     const safeCallResults = SAFE_CALL_ALLOWLIST.map(safeCallFunction);
-    const contextSummary = buildContextSummary(safeCallResults);
+    const domProbe = collectDomProbe();
+    const contextSummary = buildContextSummary(safeCallResults, domProbe);
     const blockedFunctions = functionInventory
       .filter((entry) => entry.blockedReason)
       .map((entry) => ({
@@ -333,6 +635,7 @@
         resultSummary: result.called ? summarizeValue(result.result) : null
       })),
       blockedFunctions,
+      domProbe,
       pageState
     };
 
