@@ -17,6 +17,7 @@
     "browser/page-adapter/IntentAdapter.ts",
     "browser/page-adapter/RuntimeHooks.ts",
     "browser/page-adapter/DebugHUD.ts",
+    "browser/page-adapter/formulas/FormulaRegistry.ts",
     "browser/page-adapter/bootstrap.ts",
     "bot/policies/baseline.ts",
     "scripts/extract-mechanics.ts"
