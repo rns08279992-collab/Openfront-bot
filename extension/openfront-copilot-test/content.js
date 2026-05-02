@@ -3,7 +3,34 @@
   const PROBE_MESSAGE_TYPE = "OPENFRONT_COPILOT_RUNTIME_STATUS";
   const PROBE_SCRIPT_ID = "openfront-copilot-test-page-probe";
 
+  function isOpenFrontHost(hostname) {
+    return hostname === "openfront.io" || hostname.endsWith(".openfront.io");
+  }
+
+  function isLocalDevHost(hostname) {
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  }
+
+  function readLocalhostOverride() {
+    if (!isLocalDevHost(window.location.hostname)) {
+      return false;
+    }
+
+    try {
+      return window.localStorage.getItem("openfront-copilot-enabled") === "1";
+    } catch (error) {
+      return false;
+    }
+  }
+
   const state = {
+    activationHost: window.location.hostname,
+    activationKind: isOpenFrontHost(window.location.hostname)
+      ? "openfront"
+      : isLocalDevHost(window.location.hostname)
+        ? "localhost-dev"
+        : "unsupported",
+    localhostOverrideEnabled: readLocalhostOverride(),
     bridgeLoaded: false,
     runtimeFound: false,
     runtimeSource: null,
@@ -33,6 +60,7 @@
       }`,
       `canvas: ${discovery ? discovery.canvasCount : 0}`,
       `path: ${pageState.pathname || window.location.pathname}`,
+      `host: ${state.activationHost}`,
       `runtime source: ${state.runtimeSource || "none"}`,
       "mode: read-only",
       "no actions enabled"
@@ -226,6 +254,10 @@
     state.latestContextSummary = data.contextSummary || null;
     renderOverlay();
   });
+
+  if (state.activationKind === "unsupported") {
+    return;
+  }
 
   renderOverlay();
   injectPageProbe();

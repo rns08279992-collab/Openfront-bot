@@ -10,7 +10,9 @@
       ],
       "matches": [
         "https://openfront.io/*",
-        "http://localhost:9000/*"
+        "https://*.openfront.io/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
       ]
     }
   ],
@@ -18,7 +20,9 @@
     {
       "matches": [
         "https://openfront.io/*",
-        "http://localhost:9000/*"
+        "https://*.openfront.io/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
       ],
       "js": [
         "content.js"

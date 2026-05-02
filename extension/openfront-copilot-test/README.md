@@ -8,7 +8,15 @@ Minimal Manifest V3 extension for visually testing a read-only Copilot overlay a
 2. Enable **Developer mode**
 3. Click **Load unpacked**
 4. Select `extension/openfront-copilot-test`
-5. Open `https://openfront.io/` or `http://localhost:9000/?openfront_copilot=1`
+5. Open any supported OpenFront page:
+   - `https://openfront.io/`
+   - `https://*.openfront.io/*`
+   - `http://localhost/*`
+   - `http://127.0.0.1/*`
+
+No query parameter is required. The overlay loads on every matched OpenFront route, including menu, lobby, settings, public games, private/custom games, single-player, and localhost dev pages.
+
+On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains available as an optional manual dev flag. It is not required for activation and does not expand the extension onto non-OpenFront websites.
 
 ## What it does
 
@@ -22,12 +30,14 @@ Minimal Manifest V3 extension for visually testing a read-only Copilot overlay a
   - `config: found` or `config: not found`
   - `canvas: <count>`
   - `path: <pathname>`
+  - `host: <hostname>`
   - `runtime source: <global name>` or `runtime source: none`
   - `mode: read-only`
   - `no actions enabled`
   - `copy discovery JSON`
   - `copy context JSON`
 - Injects `page-probe.js` into the page world through `chrome.runtime.getURL(...)`
+- Activates on every matched OpenFront or localhost route without requiring a query parameter
 - Polls once per second for these known runtime globals without mutating them:
   - `globalThis.__OPENFRONT_BOT_RUNTIME__`
   - `globalThis.__OPENFRONT_RUNTIME__`
@@ -74,6 +84,7 @@ Minimal Manifest V3 extension for visually testing a read-only Copilot overlay a
   - `blockedFunctions`
     - lists candidate functions blocked by name before any call attempt
   - `pageState`
+    - `location.hostname`
     - `location.pathname`
     - `document.title`
     - `document.body.children.length`

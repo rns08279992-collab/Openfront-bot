@@ -310,6 +310,7 @@
         reason: entry.blockedReason
       }));
     const pageState = {
+      hostname: window.location.hostname,
       pathname: window.location.pathname,
       title: document.title,
       bodyChildCount: document.body ? document.body.children.length : 0
