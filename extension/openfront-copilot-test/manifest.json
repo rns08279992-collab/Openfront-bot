@@ -3,6 +3,17 @@
   "name": "OpenFront Copilot Test",
   "version": "0.1.0",
   "description": "Minimal read-only wrapper for visually testing the OpenFront Copilot HUD.",
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "page-probe.js"
+      ],
+      "matches": [
+        "https://openfront.io/*",
+        "http://localhost:9000/*"
+      ]
+    }
+  ],
   "content_scripts": [
     {
       "matches": [

@@ -1,6 +1,6 @@
 # OpenFront Copilot Test Extension
 
-Minimal Manifest V3 extension for visually testing the read-only Copilot HUD on the web client. It is intentionally independent from the TypeScript build.
+Minimal Manifest V3 extension for visually testing a read-only Copilot overlay and probing whether the page world exposes known OpenFront runtime globals. It is intentionally independent from the TypeScript build.
 
 ## Load in Chrome
 
@@ -12,12 +12,26 @@ Minimal Manifest V3 extension for visually testing the read-only Copilot HUD on 
 
 ## What it does
 
-- Sets `localStorage["openfront-copilot-enabled"] = "1"`
 - Injects a small fixed overlay with:
   - `OpenFront Copilot Test`
-  - `status: loaded`
+  - `extension loaded`
+  - `page bridge loaded`
+  - `runtime found` or `runtime not found`
+  - `runtime source: <global name>` or `runtime source: none`
   - `mode: read-only`
   - `no actions enabled`
+- Injects `page-probe.js` into the page world through `chrome.runtime.getURL(...)`
+- Polls once per second for these globals without mutating them:
+  - `globalThis.__OPENFRONT_BOT_RUNTIME__`
+  - `globalThis.__OPENFRONT_RUNTIME__`
+  - `globalThis.__OPENFRONT_CLIENT_GAME_RUNNER__`
+  - `globalThis.currentGameRunner`
+- Posts runtime status back to the content script with:
+  - `runtimeFound`
+  - `runtimeSource`
+  - `checkedAtIso`
+  - `pageUrl`
+  - `availableGlobalNames`
 
 ## What it does not do
 
@@ -26,5 +40,6 @@ Minimal Manifest V3 extension for visually testing the read-only Copilot HUD on 
 - Click buttons
 - Send network requests
 - Modify game state
+- Write to OpenFront runtime globals
 - Patch runtime hooks
 - Touch baseline or eval paths
