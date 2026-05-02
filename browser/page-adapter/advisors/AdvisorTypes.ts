@@ -85,3 +85,25 @@ export interface AttackMathContext {
 export interface TilePositionIndex {
   get(tileRef: number): ObservationTilePosition | null;
 }
+
+export type GrowthTempoRecommendation =
+  | "hold_grow"
+  | "attack_spend"
+  | "raise_cap"
+  | "economy_shift"
+  | "unknown";
+
+export type GrowthTempoUrgency = "low" | "medium" | "high" | "critical" | "unknown";
+
+export interface GrowthTempoAssessment {
+  currentTroops: number | null;
+  maxTroops: number | null;
+  troopCapRatio: number | null;
+  growthEfficiencyPercent: number | null;
+  currentTroopIncreasePerTick: number | null;
+  nearCapPressure: GrowthTempoUrgency;
+  recommendation: GrowthTempoRecommendation;
+  urgency: GrowthTempoUrgency;
+  reasons: string[];
+  warnings: string[];
+}

@@ -21,6 +21,7 @@
     "browser/page-adapter/advisors/TerrainCostMap.ts",
     "browser/page-adapter/advisors/AttackMathEngine.ts",
     "browser/page-adapter/advisors/EnclosureAdvisor.ts",
+    "browser/page-adapter/advisors/GrowthTempoAdvisor.ts",
     "browser/page-adapter/formulas/FormulaRegistry.ts",
     "browser/page-adapter/bootstrap.ts",
     "bot/policies/baseline.ts",
