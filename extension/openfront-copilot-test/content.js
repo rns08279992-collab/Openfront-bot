@@ -7,21 +7,31 @@
     bridgeLoaded: false,
     runtimeFound: false,
     runtimeSource: null,
-    latestDiscovery: null
+    latestDiscovery: null,
+    latestContextSummary: null
   };
 
   function getOverlayLines() {
     const discovery = state.latestDiscovery;
+    const contextSummary = state.latestContextSummary;
     const pageState = discovery ? discovery.pageState || {} : {};
+    const playersCount =
+      contextSummary && typeof contextSummary.aliveHumanPlayersCount === "number"
+        ? String(contextSummary.aliveHumanPlayersCount)
+        : "unknown";
 
     return [
       "extension loaded",
       state.bridgeLoaded ? "page bridge loaded" : "page bridge loading",
       `runtime: ${state.runtimeFound ? "found" : "not found"}`,
-      `globals: ${discovery ? discovery.candidateGlobalKeys.length : 0}`,
-      `custom tags: ${discovery ? discovery.customElements.length : 0}`,
+      `context: ${
+        contextSummary && contextSummary.contextFound ? "found" : "not found"
+      }`,
+      `players: ${playersCount}`,
+      `config: ${
+        contextSummary && contextSummary.gameConfigFound ? "found" : "not found"
+      }`,
       `canvas: ${discovery ? discovery.canvasCount : 0}`,
-      `scripts: ${discovery ? discovery.scriptSourceHints.length : 0}`,
       `path: ${pageState.pathname || window.location.pathname}`,
       `runtime source: ${state.runtimeSource || "none"}`,
       "mode: read-only",
@@ -42,21 +52,34 @@
 
   function copyDiscoveryJson(button) {
     const discoveryJson = getDiscoveryJson();
+    copyJsonText(button, discoveryJson, "copy discovery JSON");
+  }
+
+  function getContextJson() {
+    return JSON.stringify(state.latestContextSummary || {}, null, 2);
+  }
+
+  function copyContextJson(button) {
+    const contextJson = getContextJson();
+    copyJsonText(button, contextJson, "copy context JSON");
+  }
+
+  function copyJsonText(button, text, idleLabel) {
     const onSuccess = function () {
       button.textContent = "copied";
       window.setTimeout(() => {
-        button.textContent = "copy discovery JSON";
+        button.textContent = idleLabel;
       }, 1200);
     };
     const onFailure = function () {
       button.textContent = "copy failed";
       window.setTimeout(() => {
-        button.textContent = "copy discovery JSON";
+        button.textContent = idleLabel;
       }, 1200);
     };
 
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-      navigator.clipboard.writeText(discoveryJson).then(onSuccess).catch(onFailure);
+      navigator.clipboard.writeText(text).then(onSuccess).catch(onFailure);
       return;
     }
 
@@ -119,6 +142,25 @@
         copyDiscoveryJson(copyButton);
       });
       overlay.appendChild(copyButton);
+
+      const copyContextButton = document.createElement("button");
+      copyContextButton.type = "button";
+      copyContextButton.textContent = "copy context JSON";
+      copyContextButton.style.display = "block";
+      copyContextButton.style.marginTop = "6px";
+      copyContextButton.style.padding = "0";
+      copyContextButton.style.border = "0";
+      copyContextButton.style.background = "transparent";
+      copyContextButton.style.color = "#93c5fd";
+      copyContextButton.style.cursor = "pointer";
+      copyContextButton.style.font = "inherit";
+      copyContextButton.style.textDecoration = "underline";
+      copyContextButton.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        copyContextJson(copyContextButton);
+      });
+      overlay.appendChild(copyContextButton);
     }
 
     const lines = overlay.querySelector('[data-role="lines"]');
@@ -181,6 +223,7 @@
     state.runtimeFound = Boolean(data.runtimeFound);
     state.runtimeSource = data.runtimeSource || null;
     state.latestDiscovery = data.discovery || null;
+    state.latestContextSummary = data.contextSummary || null;
     renderOverlay();
   });
 
