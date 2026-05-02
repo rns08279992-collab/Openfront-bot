@@ -99,7 +99,7 @@ export interface GrowthTempoAssessment {
   currentTroops: number | null;
   maxTroops: number | null;
   troopCapRatio: number | null;
-  growthEfficiencyPercent: number | null;
+  growthHeadroomPercent: number | null;
   currentTroopIncreasePerTick: number | null;
   nearCapPressure: GrowthTempoUrgency;
   recommendation: GrowthTempoRecommendation;

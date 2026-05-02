@@ -12,8 +12,8 @@ import type {
 import type { StrategyState } from "../../../shared/interpreter/strategy-state";
 
 const GROWTH_FORMULA_KEY = "growth.troops";
-const LOW_GROWTH_EFFICIENCY_PERCENT = 65;
-const HIGH_GROWTH_EFFICIENCY_PERCENT = 80;
+const LOW_GROWTH_HEADROOM_PERCENT = 65;
+const HIGH_GROWTH_HEADROOM_PERCENT = 80;
 
 export function evaluateGrowthTempo(
   observation: Observation,
@@ -30,7 +30,7 @@ export function evaluateGrowthTempo(
       currentTroops: ownPlayer?.troops ?? economy?.troops ?? null,
       maxTroops: economy?.maxTroops ?? null,
       troopCapRatio: null,
-      growthEfficiencyPercent: null,
+      growthHeadroomPercent: null,
       currentTroopIncreasePerTick: economy?.troopIncreasePerTick ?? null,
       nearCapPressure: "unknown",
       recommendation: "unknown",
@@ -54,7 +54,7 @@ export function evaluateGrowthTempo(
       currentTroops,
       maxTroops,
       troopCapRatio: null,
-      growthEfficiencyPercent: null,
+      growthHeadroomPercent: null,
       currentTroopIncreasePerTick,
       nearCapPressure: "unknown",
       recommendation: "unknown",
@@ -67,7 +67,7 @@ export function evaluateGrowthTempo(
   const troopCapRatio = clamp(currentTroops / maxTroops, 0, 1.25);
   const nearCapPressure = classifyNearCapPressure(troopCapRatio);
   const growthFormula = resolveGrowthFormulaEntry(formulas);
-  const growthEfficiencyPercent = computeGrowthEfficiencyPercent(
+  const growthHeadroomPercent = computeGrowthHeadroomPercent(
     troopCapRatio,
     growthFormula,
     warnings,
@@ -88,9 +88,9 @@ export function evaluateGrowthTempo(
     warnings.push("Observation does not expose current troop growth per tick.");
   }
 
-  if (growthEfficiencyPercent !== null) {
+  if (growthHeadroomPercent !== null) {
     reasons.push(
-      `Current troop level retains ${growthEfficiencyPercent.toFixed(1)}% of cap-scaled troop growth efficiency.`,
+      `Current troop level retains ${growthHeadroomPercent.toFixed(1)}% growth headroom before cap pressure suppresses troop growth.`,
     );
   }
 
@@ -100,7 +100,7 @@ export function evaluateGrowthTempo(
 
   const recommendation = chooseRecommendation(
     troopCapRatio,
-    growthEfficiencyPercent,
+    growthHeadroomPercent,
     currentTroopIncreasePerTick,
     gold,
     threatHigh,
@@ -108,7 +108,7 @@ export function evaluateGrowthTempo(
   const urgency = chooseUrgency(
     nearCapPressure,
     recommendation,
-    growthEfficiencyPercent,
+    growthHeadroomPercent,
     threatHigh,
   );
 
@@ -118,15 +118,15 @@ export function evaluateGrowthTempo(
     );
   }
 
-  if (growthEfficiencyPercent !== null && growthEfficiencyPercent <= 20) {
-    warnings.push("Current troop level is wasting most troop growth because it is pressed against the observed cap.");
+  if (growthHeadroomPercent !== null && growthHeadroomPercent <= 20) {
+    warnings.push("Current troop level has very little cap headroom because it is pressed against the observed cap.");
   }
 
   return {
     currentTroops,
     maxTroops,
     troopCapRatio,
-    growthEfficiencyPercent,
+    growthHeadroomPercent,
     currentTroopIncreasePerTick,
     nearCapPressure,
     recommendation,
@@ -146,25 +146,25 @@ function resolveGrowthFormulaEntry(
   );
 }
 
-function computeGrowthEfficiencyPercent(
+function computeGrowthHeadroomPercent(
   troopCapRatio: number,
   growthFormula: FormulaRegistryEntry | null,
   warnings: string[],
 ): number | null {
   if (!growthFormula || growthFormula.status !== "verified") {
     warnings.push(
-      "Verified growth formula metadata is unavailable, so growth efficiency stays unknown.",
+      "Verified growth formula metadata is unavailable, so growth headroom stays unknown.",
     );
     return null;
   }
 
-  const inferredEfficiency = clamp(1 - troopCapRatio, 0, 1) * 100;
-  return Number(inferredEfficiency.toFixed(1));
+  const inferredHeadroom = clamp(1 - troopCapRatio, 0, 1) * 100;
+  return Number(inferredHeadroom.toFixed(1));
 }
 
 function chooseRecommendation(
   troopCapRatio: number,
-  growthEfficiencyPercent: number | null,
+  growthHeadroomPercent: number | null,
   currentTroopIncreasePerTick: number | null,
   gold: bigint | null,
   threatHigh: boolean,
@@ -186,11 +186,11 @@ function chooseRecommendation(
     return gold !== null ? "raise_cap" : "attack_spend";
   }
 
-  if (growthEfficiencyPercent !== null && growthEfficiencyPercent < LOW_GROWTH_EFFICIENCY_PERCENT) {
+  if (growthHeadroomPercent !== null && growthHeadroomPercent < LOW_GROWTH_HEADROOM_PERCENT) {
     return threatHigh ? "economy_shift" : "hold_grow";
   }
 
-  if (growthEfficiencyPercent !== null && growthEfficiencyPercent >= HIGH_GROWTH_EFFICIENCY_PERCENT) {
+  if (growthHeadroomPercent !== null && growthHeadroomPercent >= HIGH_GROWTH_HEADROOM_PERCENT) {
     return "hold_grow";
   }
 
@@ -204,7 +204,7 @@ function chooseRecommendation(
 function chooseUrgency(
   nearCapPressure: GrowthTempoUrgency,
   recommendation: GrowthTempoRecommendation,
-  growthEfficiencyPercent: number | null,
+  growthHeadroomPercent: number | null,
   threatHigh: boolean,
 ): GrowthTempoUrgency {
   if (nearCapPressure === "critical") {
@@ -217,7 +217,7 @@ function chooseUrgency(
       : "medium";
   }
 
-  if (growthEfficiencyPercent !== null && growthEfficiencyPercent < LOW_GROWTH_EFFICIENCY_PERCENT) {
+  if (growthHeadroomPercent !== null && growthHeadroomPercent < LOW_GROWTH_HEADROOM_PERCENT) {
     return threatHigh ? "high" : "medium";
   }
 
