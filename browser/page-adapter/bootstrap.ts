@@ -1,4 +1,5 @@
 import { decideBaselineAction } from "../../bot/policies/baseline";
+import { interpretObservation } from "../../shared/interpreter/strategy-state";
 import { DebugHUD, type DebugHudSnapshot } from "./DebugHUD";
 import {
   adaptIntentAction,
@@ -6,10 +7,17 @@ import {
 } from "./IntentAdapter";
 import { maybeStartLocalEvalRunner } from "./eval";
 import { buildObservation, type Observation } from "./ObservationAdapter";
+import {
+  CopilotController,
+  type CopilotControllerSnapshot,
+} from "./copilot/CopilotController";
 import { getRuntimeSnapshot, type RuntimeSnapshot } from "./RuntimeHooks";
 
 const DEFAULT_TICK_INTERVAL_MS = 1_000;
 const BOOTSTRAP_GLOBAL_KEY = "__OPENFRONT_BOT_BOOTSTRAP__";
+const COPILOT_HUD_GLOBAL_KEY = "__OPENFRONT_COPILOT_HUD__";
+const COPILOT_QUERY_FLAG = "openfront_copilot";
+const COPILOT_STORAGE_KEY = "openfront-copilot-enabled";
 
 export type BootstrapResultCode =
   | "NO_RUNTIME"
@@ -35,6 +43,14 @@ export interface BootstrapLoop {
   tick(): Promise<BootstrapTickRecord>;
   stop(): void;
   latest(): BootstrapTickRecord | null;
+}
+
+export interface CopilotHudLoop {
+  readonly controller: CopilotController;
+  readonly intervalMs: number;
+  tick(): Promise<CopilotControllerSnapshot>;
+  stop(): void;
+  latest(): CopilotControllerSnapshot;
 }
 
 export function startBootstrapLoop(intervalMs = DEFAULT_TICK_INTERVAL_MS): BootstrapLoop {
@@ -190,6 +206,90 @@ export function startBootstrapLoop(intervalMs = DEFAULT_TICK_INTERVAL_MS): Boots
 export function getBootstrapLoop(): BootstrapLoop | null {
   const value = (globalThis as Record<string, unknown>)[BOOTSTRAP_GLOBAL_KEY];
   return isBootstrapLoop(value) ? value : null;
+}
+
+export function startCopilotHudLoop(
+  intervalMs = DEFAULT_TICK_INTERVAL_MS,
+): CopilotHudLoop {
+  const globalRecord = globalThis as Record<string, unknown>;
+  const existing = globalRecord[COPILOT_HUD_GLOBAL_KEY];
+  if (isCopilotHudLoop(existing)) {
+    return existing;
+  }
+
+  const controller = new CopilotController();
+  let stopped = false;
+
+  const runTick = async (): Promise<CopilotControllerSnapshot> => {
+    const runtime = getRuntimeSnapshot();
+    if (!runtime.found || !runtime.gameView) {
+      controller.showWaiting("runtime unavailable");
+      return controller.latest();
+    }
+
+    try {
+      const observation = await buildObservation(runtime.gameView);
+      const strategyState = interpretObservation(observation);
+      controller.updateFromObservation(observation, strategyState);
+      return controller.latest();
+    } catch (error) {
+      controller.showWaiting(`observation unavailable: ${formatError(error)}`);
+      return controller.latest();
+    }
+  };
+
+  const timer = setInterval(() => {
+    if (stopped) {
+      return;
+    }
+
+    void runTick().catch((error) => {
+      controller.showWaiting(`copilot tick failed: ${formatError(error)}`);
+    });
+  }, intervalMs);
+
+  const loop: CopilotHudLoop = {
+    controller,
+    intervalMs,
+    tick: runTick,
+    stop() {
+      if (stopped) {
+        return;
+      }
+      stopped = true;
+      clearInterval(timer);
+      delete globalRecord[COPILOT_HUD_GLOBAL_KEY];
+      controller.dispose();
+    },
+    latest() {
+      return controller.latest();
+    },
+  };
+
+  globalRecord[COPILOT_HUD_GLOBAL_KEY] = loop;
+  void runTick();
+  return loop;
+}
+
+export function getCopilotHudLoop(): CopilotHudLoop | null {
+  const value = (globalThis as Record<string, unknown>)[COPILOT_HUD_GLOBAL_KEY];
+  return isCopilotHudLoop(value) ? value : null;
+}
+
+export function isCopilotHudEnabled(documentRef: Document = document): boolean {
+  const location = documentRef.defaultView?.location;
+  if (location) {
+    const params = new URLSearchParams(location.search);
+    if (params.get(COPILOT_QUERY_FLAG) === "1") {
+      return true;
+    }
+  }
+
+  try {
+    return documentRef.defaultView?.localStorage?.getItem(COPILOT_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 function assessObservationCompleteness(observation: Observation): {
@@ -424,7 +524,19 @@ function isBootstrapLoop(value: unknown): value is BootstrapLoop {
   );
 }
 
+function isCopilotHudLoop(value: unknown): value is CopilotHudLoop {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as CopilotHudLoop).tick === "function" &&
+    typeof (value as CopilotHudLoop).stop === "function" &&
+    typeof (value as CopilotHudLoop).latest === "function"
+  );
+}
+
 if (typeof document !== "undefined" && typeof window !== "undefined") {
-  startBootstrapLoop();
+  if (isCopilotHudEnabled(document)) {
+    startCopilotHudLoop();
+  }
   maybeStartLocalEvalRunner();
 }

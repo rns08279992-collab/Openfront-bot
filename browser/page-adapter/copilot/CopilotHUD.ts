@@ -8,6 +8,7 @@ import type {
 export interface CopilotHudSnapshot {
   readonly status: "waiting" | "ready";
   readonly report: CopilotReport | null;
+  readonly waitingReason?: string | null;
 }
 
 const HUD_ELEMENT_ID = "openfront-copilot-hud";
@@ -79,6 +80,7 @@ export class CopilotHUD {
     this.update({
       status: "waiting",
       report: null,
+      waitingReason: null,
     });
   }
 
@@ -99,7 +101,9 @@ export class CopilotHUD {
 
 export function buildCopilotHudText(snapshot: CopilotHudSnapshot): string {
   if (snapshot.status !== "ready" || !snapshot.report) {
-    return "copilot waiting for observation";
+    return snapshot.waitingReason
+      ? `copilot waiting: ${snapshot.waitingReason}`
+      : "copilot waiting for observation";
   }
 
   const report = snapshot.report;
