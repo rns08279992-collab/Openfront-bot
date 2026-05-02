@@ -18,6 +18,16 @@ describe("buildCopilotHudText", () => {
     ).toBe("copilot waiting for observation");
   });
 
+  it("shows a waiting reason when one is available", () => {
+    expect(
+      buildCopilotHudText({
+        status: "waiting",
+        report: null,
+        waitingReason: "runtime unavailable",
+      }),
+    ).toBe("copilot waiting: runtime unavailable");
+  });
+
   it("renders the required report sections with visible warnings", () => {
     const report = buildCopilotReport(
       makeObservation({
