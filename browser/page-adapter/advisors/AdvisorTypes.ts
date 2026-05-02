@@ -107,3 +107,44 @@ export interface GrowthTempoAssessment {
   reasons: string[];
   warnings: string[];
 }
+
+export type TradeAllianceRecommendation =
+  | "build_port"
+  | "upgrade_port"
+  | "build_factory"
+  | "ally_for_trade"
+  | "maintain_trade"
+  | "deprioritize_trade"
+  | "unknown";
+
+export type TradeAllianceRelation = "team" | "ally" | "friendly" | "other";
+
+export interface TradeAlliancePartnerAssessment {
+  partnerPlayerId: ProtocolId;
+  displayName: string;
+  relation: TradeAllianceRelation;
+  embargoed: boolean;
+  visibleReadyPortCount: number;
+  visiblePartnerPortLevelSum: number;
+  estimatedTradeShipOpportunityScore: number | null;
+  estimatedTrainPerStopUpside: number | null;
+  estimatedPartialROI: number | null;
+  recommendation: TradeAllianceRecommendation;
+  confidence: AdvisorConfidence;
+  formulas: string[];
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface TradeAllianceROIAdvisorResult {
+  recommendation: TradeAllianceRecommendation;
+  bestPartnerPlayerId: ProtocolId | null;
+  partnerAssessments: TradeAlliancePartnerAssessment[];
+  ownReadyPortCount: number;
+  ownFactoryCount: number;
+  ownTrainStationCount: number;
+  confidence: AdvisorConfidence;
+  formulas: string[];
+  reasons: string[];
+  warnings: string[];
+}
