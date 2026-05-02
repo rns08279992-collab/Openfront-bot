@@ -49,6 +49,33 @@ export interface AttackMathAssessment {
   warnings: string[];
 }
 
+export type EnclosureStatus =
+  | "none"
+  | "inferredOpportunity"
+  | "verifiedOpportunity"
+  | "unknown";
+
+export interface EnclosureClosingTileCandidate {
+  tileRef: number;
+  position: ObservationTilePosition | null;
+  source: "cheapExpansionCandidate" | "nearbyFrontierTile";
+  supportCount: number | null;
+  adjacentOwnBorderTileCount: number | null;
+  estimatedAttackerLossPerTile: number | null;
+  terrainConfidence: AdvisorConfidence;
+}
+
+export interface EnclosureOpportunityAssessment {
+  targetPlayerId: ProtocolId;
+  status: EnclosureStatus;
+  tilesToCloseEstimate: number | null;
+  candidateClosingTiles: EnclosureClosingTileCandidate[];
+  expectedBenefit: string;
+  confidence: AdvisorConfidence;
+  reasons: string[];
+  warnings: string[];
+}
+
 export interface AttackMathContext {
   observation: Observation;
   strategyState?: StrategyState | null;
