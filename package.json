@@ -2,7 +2,7 @@
   "name": "openfront",
   "private": true,
   "scripts": {
-    "test": "vitest run browser/page-adapter/advisors/__tests__",
+    "test": "vitest run browser/page-adapter/advisors/__tests__ browser/page-adapter/copilot/__tests__",
     "typecheck": "tsc --noEmit",
     "extract-mechanics": "node scripts/extract-mechanics.ts",
     "eval:prepare": "node scripts/prepare-local-eval.mjs",
