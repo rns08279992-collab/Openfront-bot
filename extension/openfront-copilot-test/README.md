@@ -226,6 +226,9 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
 - The copy payload is read-only JSON from the most recent page probe result.
 - Click `copy public snapshot JSON` to copy the compact safe-call public snapshot, including `threatSummary`.
 - Click `copy DOM probe JSON` to copy the element/property scan and any usable DOM-derived context metadata.
+- Copy first tries `navigator.clipboard.writeText(...)`, then falls back to a hidden textarea plus `document.execCommand("copy")`.
+- When both copy paths fail, the overlay shows `copy failed: <short error>` and opens a manual-copy textarea with the JSON already selected for `Ctrl+A` / `Ctrl+C`.
+- The overlay includes a visible status line and a `show public snapshot JSON` button that toggles a read-only textarea for the latest public snapshot JSON.
 
 ## Threat summary rules
 
