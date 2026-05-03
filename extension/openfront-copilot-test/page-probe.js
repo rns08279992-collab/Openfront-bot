@@ -382,8 +382,83 @@
     };
   }
 
+  function coerceFiniteNumber(value) {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const normalized = value.trim().replace(/,/g, "");
+    if (!normalized) {
+      return null;
+    }
+
+    const match = normalized.match(/^([+-]?\d+(?:\.\d+)?)([kKmMbB])?$/);
+    if (!match) {
+      return null;
+    }
+
+    const base = Number(match[1]);
+    if (!Number.isFinite(base)) {
+      return null;
+    }
+
+    const suffix = match[2] ? match[2].toUpperCase() : "";
+    const multiplier =
+      suffix === "K" ? 1e3 : suffix === "M" ? 1e6 : suffix === "B" ? 1e9 : 1;
+    const coerced = base * multiplier;
+    return Number.isFinite(coerced) ? coerced : null;
+  }
+
+  function buildReadOnlyControlPanelStats() {
+    const stats = {
+      found: false,
+      troops: null,
+      maxTroops: null,
+      gold: null,
+      troopRate: null,
+      attackRatio: null,
+      attackingTroops: null,
+      errors: []
+    };
+    const controlPanel = document.querySelector("control-panel");
+
+    if (!controlPanel) {
+      return stats;
+    }
+
+    stats.found = true;
+
+    const reads = [
+      { sourceName: "_troops", targetName: "troops" },
+      { sourceName: "_maxTroops", targetName: "maxTroops" },
+      { sourceName: "_gold", targetName: "gold" },
+      { sourceName: "troopRate", targetName: "troopRate" },
+      { sourceName: "attackRatio", targetName: "attackRatio" },
+      { sourceName: "_attackingTroops", targetName: "attackingTroops" }
+    ];
+
+    for (const { sourceName, targetName } of reads) {
+      try {
+        stats[targetName] = coerceFiniteNumber(controlPanel[sourceName]);
+      } catch (error) {
+        stats.errors.push({
+          name: sourceName,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    return stats;
+  }
+
   function buildReadOnlyThreatSummary(snapshot) {
     const myPlayer = snapshot && snapshot.myPlayer ? snapshot.myPlayer : null;
+    const controlPanelStats =
+      snapshot && snapshot.controlPanelStats ? snapshot.controlPanelStats : null;
     const humanOpponentCount =
       snapshot && typeof snapshot.humanOpponentCount === "number"
         ? snapshot.humanOpponentCount
@@ -392,26 +467,44 @@
       snapshot && typeof snapshot.botPlayerCount === "number"
         ? snapshot.botPlayerCount
         : null;
-    const troops =
-      myPlayer && typeof myPlayer.troops === "number" ? myPlayer.troops : null;
-    const maxTroops =
-      myPlayer && typeof myPlayer.maxTroops === "number" ? myPlayer.maxTroops : null;
+    const myPlayerTroops = myPlayer ? coerceFiniteNumber(myPlayer.troops) : null;
+    const myPlayerMaxTroops = myPlayer ? coerceFiniteNumber(myPlayer.maxTroops) : null;
+    const fallbackTroops =
+      controlPanelStats && controlPanelStats.found
+        ? coerceFiniteNumber(controlPanelStats.troops)
+        : null;
+    const fallbackMaxTroops =
+      controlPanelStats && controlPanelStats.found
+        ? coerceFiniteNumber(controlPanelStats.maxTroops)
+        : null;
+    const troops = Number.isFinite(myPlayerTroops) ? myPlayerTroops : fallbackTroops;
+    const maxTroops = Number.isFinite(myPlayerMaxTroops)
+      ? myPlayerMaxTroops
+      : fallbackMaxTroops;
+    const hasFiniteTroops = Number.isFinite(troops);
+    const hasFiniteMaxTroops = Number.isFinite(maxTroops);
+    const usingFallback =
+      (hasFiniteTroops && troops === fallbackTroops && troops !== myPlayerTroops) ||
+      (hasFiniteMaxTroops &&
+        maxTroops === fallbackMaxTroops &&
+        maxTroops !== myPlayerMaxTroops);
+    const statsSource = usingFallback ? "control-panel fallback" : "myPlayer";
     const reasons = [];
     const suggestions = [];
 
-    if (!myPlayer) {
+    if (!myPlayer && !usingFallback) {
       reasons.push("my player data unavailable");
     }
 
-    if (myPlayer && troops === null) {
+    if (!hasFiniteTroops) {
       reasons.push("troops unavailable");
     }
 
-    if (myPlayer && maxTroops === null) {
+    if (!hasFiniteMaxTroops) {
       reasons.push("max troops unavailable");
     }
 
-    if (!myPlayer || troops === null || maxTroops === null) {
+    if (!hasFiniteTroops || !hasFiniteMaxTroops) {
       if (humanOpponentCount > 0) {
         suggestions.push("monitor human opponents");
       }
@@ -422,15 +515,21 @@
       return {
         status: "unknown",
         urgency: "unknown",
+        statsSource,
         reasons,
         suggestions
       };
     }
 
-    const troopRatio = maxTroops > 0 ? troops / maxTroops : 0;
-    const lowTroops = troopRatio < 0.45;
-    const veryLowTroops = troopRatio < 0.25;
+    const troopRatio = maxTroops > 0 ? troops / maxTroops : null;
+    const hasTroopRatio = typeof troopRatio === "number" && Number.isFinite(troopRatio);
+    const lowTroops = hasTroopRatio && troopRatio < 0.45;
+    const veryLowTroops = hasTroopRatio && troopRatio < 0.25;
     const hasHumanOpponents = humanOpponentCount > 0;
+
+    if (usingFallback) {
+      reasons.push("troops from control-panel fallback");
+    }
 
     if (veryLowTroops) {
       reasons.push(`low troop ratio (${troops}/${maxTroops})`);
@@ -460,6 +559,8 @@
       return {
         status: "danger",
         urgency: "high",
+        troopCapacityRatio: troopRatio,
+        statsSource,
         reasons,
         suggestions
       };
@@ -469,6 +570,8 @@
       return {
         status: "watch",
         urgency: "medium",
+        troopCapacityRatio: troopRatio,
+        statsSource,
         reasons,
         suggestions
       };
@@ -477,6 +580,8 @@
     return {
       status: "safe",
       urgency: "low",
+      troopCapacityRatio: troopRatio,
+      statsSource,
       reasons,
       suggestions
     };
@@ -923,6 +1028,7 @@
     const configValue = configResult && configResult.called ? configResult.result : null;
     const playersValue = playersResult && playersResult.called ? playersResult.result : null;
     const domContext = domProbe && domProbe.usablePair ? domProbe.usablePair : null;
+    const controlPanelStats = buildReadOnlyControlPanelStats();
 
     const contextSummary = {
       contextFound: Boolean((domContext && domContext.contextFound) || contextValue),
@@ -1000,6 +1106,7 @@
         ? limitArray(domContext.playersSample, MAX_PLAYERS_SAMPLE_COUNT)
         : [],
       myPlayer: domContext ? domContext.myPlayer : null,
+      controlPanelStats,
       currentTick:
         domContext && domContext.contextFound ? domContext.currentTick : null,
       aliveHumanPlayersCount: Array.isArray(playersValue) ? playersValue.length : null,

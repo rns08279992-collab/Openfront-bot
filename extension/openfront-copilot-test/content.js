@@ -73,6 +73,46 @@
       : "none";
   }
 
+  function formatFiniteNumber(value) {
+    return typeof value === "number" && Number.isFinite(value)
+      ? String(value)
+      : "unknown";
+  }
+
+  function formatTroopPair(threatSummary, contextSummary) {
+    const myPlayer = contextSummary && contextSummary.myPlayer ? contextSummary.myPlayer : null;
+    const controlPanelStats =
+      contextSummary && contextSummary.controlPanelStats
+        ? contextSummary.controlPanelStats
+        : null;
+    const troops =
+      myPlayer && typeof myPlayer.troops === "number" && Number.isFinite(myPlayer.troops)
+        ? myPlayer.troops
+        : controlPanelStats &&
+            typeof controlPanelStats.troops === "number" &&
+            Number.isFinite(controlPanelStats.troops)
+          ? controlPanelStats.troops
+          : null;
+    const maxTroops =
+      myPlayer &&
+      typeof myPlayer.maxTroops === "number" &&
+      Number.isFinite(myPlayer.maxTroops)
+        ? myPlayer.maxTroops
+        : controlPanelStats &&
+            typeof controlPanelStats.maxTroops === "number" &&
+            Number.isFinite(controlPanelStats.maxTroops)
+          ? controlPanelStats.maxTroops
+          : null;
+
+    return `${formatFiniteNumber(troops)}/${formatFiniteNumber(maxTroops)}`;
+  }
+
+  function formatTroopRatio(threatSummary) {
+    return threatSummary && typeof threatSummary.troopCapacityRatio === "number"
+      ? threatSummary.troopCapacityRatio.toFixed(2)
+      : "unknown";
+  }
+
   function getOverlayLines() {
     const discovery = state.latestDiscovery;
     const contextSummary = state.latestContextSummary;
@@ -123,6 +163,9 @@
       `bots: ${botsLine}`,
       `nations: ${nationBotsLine}`,
       `unknown: ${unknownCount}`,
+      `troops: ${formatTroopPair(threatSummary, contextSummary)}`,
+      `troop ratio: ${formatTroopRatio(threatSummary)}`,
+      `stats source: ${threatSummary ? threatSummary.statsSource || "unknown" : "unknown"}`,
       `threat status: ${threatSummary ? threatSummary.status : "unknown"}`,
       `threat urgency: ${threatSummary ? threatSummary.urgency : "unknown"}`,
       `threat reasons: ${formatSummaryList(threatSummary ? threatSummary.reasons : [])}`,

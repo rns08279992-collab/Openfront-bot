@@ -33,6 +33,9 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `bots: <alive>/<total>` or `bots: unknown`
   - `nations: <alive>/<total>` or `nations: unknown`
   - `unknown: <count>` or `unknown: unknown`
+  - `troops: <current>/<max>` or `troops: unknown/unknown`
+  - `troop ratio: <ratio>` or `troop ratio: unknown`
+  - `stats source: myPlayer|control-panel fallback|unknown`
   - `threat status: <safe|watch|danger|unknown>`
   - `threat urgency: <low|medium|high|unknown>`
   - `threat reasons: <first 2 reasons>` or `threat reasons: none`
@@ -198,9 +201,20 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `unknownPlayerCount`
   - `playersSample`
   - `myPlayer`
+  - `controlPanelStats`
+    - `found`
+    - `troops`
+    - `maxTroops`
+    - `gold`
+    - `troopRate`
+    - `attackRatio`
+    - `attackingTroops`
+    - `errors`
   - `threatSummary`
     - `status`
     - `urgency`
+    - `troopCapacityRatio`
+    - `statsSource`
     - `reasons`
     - `suggestions`
   - `currentTick`
@@ -239,11 +253,25 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
 ## Threat summary rules
 
 - `buildReadOnlyThreatSummary(snapshot)` uses only the existing public snapshot data already collected by the page probe.
-- Returns `unknown` status and urgency when `myPlayer` is missing or either `troops` or `maxTroops` is unavailable.
-- Returns `danger` with `high` urgency when `myPlayer.troops / myPlayer.maxTroops < 0.25`.
-- Returns `watch` with `medium` urgency when `myPlayer.troops / myPlayer.maxTroops < 0.45`.
+- `buildReadOnlyControlPanelStats()` reads only scalar properties from `document.querySelector("control-panel")`:
+  - `_troops`
+  - `_maxTroops`
+  - `_gold`
+  - `troopRate`
+  - `attackRatio`
+  - `_attackingTroops`
+- Every control-panel read is wrapped in `try/catch`.
+- Only finite numbers are kept; formatted strings may be parsed when they use safe `K`, `M`, or `B` suffixes.
+- Never calls any control-panel action or mutation methods.
+- Threat summary prefers `snapshot.myPlayer.troops` and `snapshot.myPlayer.maxTroops` when valid.
+- Threat summary falls back to `snapshot.controlPanelStats.troops` and `snapshot.controlPanelStats.maxTroops` when needed.
+- Returns `unknown` status and urgency when either `troops` or `maxTroops` is unavailable after fallback.
+- Returns `danger` with `high` urgency when `troops / maxTroops < 0.25`.
+- Returns `watch` with `medium` urgency when `troops / maxTroops < 0.45`.
 - Returns `watch` with `medium` urgency when `humanOpponentCount > 0`.
-- Returns `safe` with `low` urgency when `myPlayer.troops / myPlayer.maxTroops >= 0.45` and `humanOpponentCount === 0`.
+- Returns `safe` with `low` urgency when `troops / maxTroops >= 0.45` and `humanOpponentCount === 0`.
+- Includes `troopCapacityRatio` when `troops` and `maxTroops` are finite and `maxTroops > 0`.
+- Adds `troops from control-panel fallback` when fallback stats are used.
 - Adds `grow before fighting` when troop ratio is below `0.45`.
 - Adds `monitor human opponents` when `humanOpponentCount > 0`.
 - Adds `bot-only match: economy focus` when `humanOpponentCount === 0` and `botPlayerCount > 0`.
