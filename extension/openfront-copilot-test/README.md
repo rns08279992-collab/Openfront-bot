@@ -27,6 +27,10 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `runtime: found` or `runtime: not found`
   - `context: found` or `context: not found`
   - `players: <count>` or `players: unknown`
+  - `humans: <alive>/<total>` or `humans: unknown`
+  - `bots: <alive>/<total>` or `bots: unknown`
+  - `nation bots: <alive>/<total>` or `nation bots: unknown`
+  - `unknown: <count>` or `unknown: unknown`
   - `config: found` or `config: not found`
   - `canvas: <count>`
   - `path: <pathname>`
@@ -86,6 +90,24 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
       - `game.playerViews()`
       - `game.myPlayer()`
       - `game.ticks()`
+    - classifies sampled player views using only these read-only signals:
+      - `player.type?.()`
+      - `player.data?.playerType`
+      - `player.isPlayer?.()`
+      - `player.isHuman?.()`
+      - `player.isBot?.()`
+      - `player.id?.()`
+      - `player.smallID?.()`
+      - `player.displayName?.()`
+      - `player.name?.()`
+      - `player.isAlive?.()`
+    - applies these classification rules in order:
+      - same `id()` or `smallID()` as `myPlayer` => `me`
+      - `type()` or `data.playerType` equals `NATION` => `nation_bot`
+      - `type()` or `data.playerType` contains `BOT` or `AI` => `bot`
+      - `isBot?.()` returns `true` => `bot`
+      - `isHuman?.()` returns `true`, or `isPlayer?.()` returns `true` and the player is not already bot/nation => `human`
+      - otherwise => `unknown`
   - `candidateGlobalKeys`
     - `Object.keys(globalThis)` filtered for keys containing `openfront`, `game`, `runner`, `client`, `lobby`, `map`, or `player`
     - limited to the first 30 matches
@@ -136,7 +158,17 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `gameSourceProperty`
   - `transformSourceProperty`
   - `playerCount`
+  - `totalPlayerViews`
+  - `aliveTotal`
   - `myPlayerFound`
+  - `humanPlayerCount`
+  - `aliveHumanPlayerCount`
+  - `botPlayerCount`
+  - `aliveBotPlayerCount`
+  - `nationBotCount`
+  - `aliveNationBotCount`
+  - `unknownPlayerCount`
+  - `playersSample`
   - `currentTick`
   - `contextKeys`
   - `gameConfigFound`

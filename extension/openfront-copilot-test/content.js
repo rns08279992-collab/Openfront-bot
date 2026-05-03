@@ -42,11 +42,33 @@
     const discovery = state.latestDiscovery;
     const contextSummary = state.latestContextSummary;
     const pageState = discovery ? discovery.pageState || {} : {};
-    const playersCount =
-      contextSummary && typeof contextSummary.playerCount === "number"
-        ? String(contextSummary.playerCount)
-        : contextSummary && typeof contextSummary.aliveHumanPlayersCount === "number"
-        ? String(contextSummary.aliveHumanPlayersCount)
+    const totalPlayerViews =
+      contextSummary && typeof contextSummary.totalPlayerViews === "number"
+        ? String(contextSummary.totalPlayerViews)
+        : contextSummary && typeof contextSummary.playerCount === "number"
+          ? String(contextSummary.playerCount)
+          : "unknown";
+    const humansLine =
+      contextSummary &&
+      typeof contextSummary.aliveHumanPlayerCount === "number" &&
+      typeof contextSummary.humanPlayerCount === "number"
+        ? `${contextSummary.aliveHumanPlayerCount}/${contextSummary.humanPlayerCount}`
+        : "unknown";
+    const botsLine =
+      contextSummary &&
+      typeof contextSummary.aliveBotPlayerCount === "number" &&
+      typeof contextSummary.botPlayerCount === "number"
+        ? `${contextSummary.aliveBotPlayerCount}/${contextSummary.botPlayerCount}`
+        : "unknown";
+    const nationBotsLine =
+      contextSummary &&
+      typeof contextSummary.aliveNationBotCount === "number" &&
+      typeof contextSummary.nationBotCount === "number"
+        ? `${contextSummary.aliveNationBotCount}/${contextSummary.nationBotCount}`
+        : "unknown";
+    const unknownCount =
+      contextSummary && typeof contextSummary.unknownPlayerCount === "number"
+        ? String(contextSummary.unknownPlayerCount)
         : "unknown";
 
     return [
@@ -56,7 +78,11 @@
       `context: ${
         contextSummary && contextSummary.contextFound ? "found" : "not found"
       }`,
-      `players: ${playersCount}`,
+      `players: ${totalPlayerViews}`,
+      `humans: ${humansLine}`,
+      `bots: ${botsLine}`,
+      `nation bots: ${nationBotsLine}`,
+      `unknown: ${unknownCount}`,
       `config: ${
         contextSummary && contextSummary.gameConfigFound ? "found" : "not found"
       }`,

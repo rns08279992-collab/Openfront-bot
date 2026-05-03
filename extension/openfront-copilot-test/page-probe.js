@@ -235,6 +235,176 @@
     };
   }
 
+  function safeZeroArgCall(value, name) {
+    if (!value || (typeof value !== "object" && typeof value !== "function")) {
+      return undefined;
+    }
+
+    const propertyValue = readProperty(value, name);
+    if (typeof propertyValue !== "function") {
+      return undefined;
+    }
+
+    try {
+      return propertyValue.call(value);
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  function normalizePlayerType(value) {
+    if (typeof value !== "string") {
+      return "";
+    }
+
+    return value.trim().toUpperCase();
+  }
+
+  function getPlayerIdentity(player) {
+    return {
+      id: safeZeroArgCall(player, "id"),
+      smallID: safeZeroArgCall(player, "smallID")
+    };
+  }
+
+  function isSamePlayer(player, myPlayer) {
+    const playerIdentity = getPlayerIdentity(player);
+    const myPlayerIdentity = getPlayerIdentity(myPlayer);
+
+    return Boolean(
+      (playerIdentity.id !== undefined &&
+        myPlayerIdentity.id !== undefined &&
+        playerIdentity.id === myPlayerIdentity.id) ||
+        (playerIdentity.smallID !== undefined &&
+          myPlayerIdentity.smallID !== undefined &&
+          playerIdentity.smallID === myPlayerIdentity.smallID)
+    );
+  }
+
+  function classifyPlayer(player, myPlayer) {
+    if (!player || (typeof player !== "object" && typeof player !== "function")) {
+      return "unknown";
+    }
+
+    if (myPlayer && isSamePlayer(player, myPlayer)) {
+      return "me";
+    }
+
+    const rawType = normalizePlayerType(safeZeroArgCall(player, "type"));
+    const rawDataType = normalizePlayerType(
+      player &&
+        player.data &&
+        typeof player.data === "object" &&
+        typeof player.data.playerType === "string"
+        ? player.data.playerType
+        : undefined
+    );
+    const combinedType = [rawType, rawDataType].filter(Boolean).join(" ");
+
+    if (rawType === "NATION" || rawDataType === "NATION") {
+      return "nation_bot";
+    }
+
+    if (
+      combinedType.includes("BOT") ||
+      combinedType.includes("AI")
+    ) {
+      return "bot";
+    }
+
+    if (safeZeroArgCall(player, "isBot") === true) {
+      return "bot";
+    }
+
+    if (
+      safeZeroArgCall(player, "isHuman") === true ||
+      (safeZeroArgCall(player, "isPlayer") === true &&
+        combinedType.indexOf("BOT") === -1 &&
+        combinedType.indexOf("AI") === -1 &&
+        rawType !== "NATION" &&
+        rawDataType !== "NATION")
+    ) {
+      return "human";
+    }
+
+    return "unknown";
+  }
+
+  function buildPlayerSample(player, myPlayer) {
+    return {
+      classification: classifyPlayer(player, myPlayer),
+      isAlive: safeZeroArgCall(player, "isAlive"),
+      id: safeZeroArgCall(player, "id"),
+      smallID: safeZeroArgCall(player, "smallID"),
+      displayName: safeZeroArgCall(player, "displayName"),
+      name: safeZeroArgCall(player, "name"),
+      type: safeZeroArgCall(player, "type"),
+      playerType:
+        player &&
+        player.data &&
+        typeof player.data === "object" &&
+        typeof player.data.playerType !== "undefined"
+          ? player.data.playerType
+          : undefined
+    };
+  }
+
+  function summarizePlayers(playerViews, myPlayer) {
+    const summary = {
+      totalPlayerViews: Array.isArray(playerViews) ? playerViews.length : 0,
+      aliveTotal: 0,
+      myPlayerFound: false,
+      humanPlayerCount: 0,
+      aliveHumanPlayerCount: 0,
+      botPlayerCount: 0,
+      aliveBotPlayerCount: 0,
+      nationBotCount: 0,
+      aliveNationBotCount: 0,
+      unknownPlayerCount: 0,
+      playersSample: []
+    };
+
+    if (!Array.isArray(playerViews)) {
+      return summary;
+    }
+
+    for (const player of playerViews) {
+      const classification = classifyPlayer(player, myPlayer);
+      const isAlive = safeZeroArgCall(player, "isAlive") === true;
+
+      if (isAlive) {
+        summary.aliveTotal += 1;
+      }
+
+      if (classification === "me") {
+        summary.myPlayerFound = true;
+      } else if (classification === "human") {
+        summary.humanPlayerCount += 1;
+        if (isAlive) {
+          summary.aliveHumanPlayerCount += 1;
+        }
+      } else if (classification === "bot") {
+        summary.botPlayerCount += 1;
+        if (isAlive) {
+          summary.aliveBotPlayerCount += 1;
+        }
+      } else if (classification === "nation_bot") {
+        summary.nationBotCount += 1;
+        if (isAlive) {
+          summary.aliveNationBotCount += 1;
+        }
+      } else {
+        summary.unknownPlayerCount += 1;
+      }
+
+      if (summary.playersSample.length < 20) {
+        summary.playersSample.push(buildPlayerSample(player, myPlayer));
+      }
+    }
+
+    return summary;
+  }
+
   function selectPreferredProperty(element, propertyNames) {
     for (const name of propertyNames) {
       if (hasProperty(element, name)) {
@@ -330,8 +500,17 @@
       sourceElementTag: null,
       gameSourceProperty: null,
       transformSourceProperty: null,
-      playerCount: null,
+      totalPlayerViews: null,
+      aliveTotal: null,
       myPlayerFound: false,
+      humanPlayerCount: null,
+      aliveHumanPlayerCount: null,
+      botPlayerCount: null,
+      aliveBotPlayerCount: null,
+      nationBotCount: null,
+      aliveNationBotCount: null,
+      unknownPlayerCount: null,
+      playersSample: [],
       currentTick: null,
       errors: []
     };
@@ -363,7 +542,19 @@
 
       try {
         const playerViews = game.playerViews();
-        usablePair.playerCount = Array.isArray(playerViews) ? playerViews.length : null;
+        const myPlayer = game.myPlayer ? game.myPlayer() : null;
+        const playerSummary = summarizePlayers(playerViews, myPlayer);
+        usablePair.totalPlayerViews = playerSummary.totalPlayerViews;
+        usablePair.aliveTotal = playerSummary.aliveTotal;
+        usablePair.myPlayerFound = playerSummary.myPlayerFound;
+        usablePair.humanPlayerCount = playerSummary.humanPlayerCount;
+        usablePair.aliveHumanPlayerCount = playerSummary.aliveHumanPlayerCount;
+        usablePair.botPlayerCount = playerSummary.botPlayerCount;
+        usablePair.aliveBotPlayerCount = playerSummary.aliveBotPlayerCount;
+        usablePair.nationBotCount = playerSummary.nationBotCount;
+        usablePair.aliveNationBotCount = playerSummary.aliveNationBotCount;
+        usablePair.unknownPlayerCount = playerSummary.unknownPlayerCount;
+        usablePair.playersSample = playerSummary.playersSample;
       } catch (error) {
         usablePair.errors.push({
           name: "playerViews",
@@ -557,11 +748,48 @@
           ? domContext.transformSourceProperty
           : null,
       playerCount:
-        domContext && typeof domContext.playerCount === "number"
-          ? domContext.playerCount
+        domContext && typeof domContext.totalPlayerViews === "number"
+          ? domContext.totalPlayerViews
+          : null,
+      totalPlayerViews:
+        domContext && typeof domContext.totalPlayerViews === "number"
+          ? domContext.totalPlayerViews
+          : null,
+      aliveTotal:
+        domContext && typeof domContext.aliveTotal === "number"
+          ? domContext.aliveTotal
           : null,
       myPlayerFound:
         domContext && domContext.contextFound ? domContext.myPlayerFound : false,
+      humanPlayerCount:
+        domContext && typeof domContext.humanPlayerCount === "number"
+          ? domContext.humanPlayerCount
+          : null,
+      aliveHumanPlayerCount:
+        domContext && typeof domContext.aliveHumanPlayerCount === "number"
+          ? domContext.aliveHumanPlayerCount
+          : null,
+      botPlayerCount:
+        domContext && typeof domContext.botPlayerCount === "number"
+          ? domContext.botPlayerCount
+          : null,
+      aliveBotPlayerCount:
+        domContext && typeof domContext.aliveBotPlayerCount === "number"
+          ? domContext.aliveBotPlayerCount
+          : null,
+      nationBotCount:
+        domContext && typeof domContext.nationBotCount === "number"
+          ? domContext.nationBotCount
+          : null,
+      aliveNationBotCount:
+        domContext && typeof domContext.aliveNationBotCount === "number"
+          ? domContext.aliveNationBotCount
+          : null,
+      unknownPlayerCount:
+        domContext && typeof domContext.unknownPlayerCount === "number"
+          ? domContext.unknownPlayerCount
+          : null,
+      playersSample: domContext ? limitArray(domContext.playersSample, 20) : [],
       currentTick:
         domContext && domContext.contextFound ? domContext.currentTick : null,
       aliveHumanPlayersCount: Array.isArray(playersValue) ? playersValue.length : null,
