@@ -26,10 +26,12 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `page bridge loaded`
   - `runtime: found` or `runtime: not found`
   - `context: found` or `context: not found`
+  - `me: <displayName|name|smallID|id>` or `me: unknown`
   - `players: <count>` or `players: unknown`
-  - `humans: <alive>/<total>` or `humans: unknown`
+  - `humans: <alive including me>/<total including me>` or `humans: unknown`
+  - `human opponents: <alive>/<total>` or `human opponents: unknown`
   - `bots: <alive>/<total>` or `bots: unknown`
-  - `nation bots: <alive>/<total>` or `nation bots: unknown`
+  - `nations: <alive>/<total>` or `nations: unknown`
   - `unknown: <count>` or `unknown: unknown`
   - `config: found` or `config: not found`
   - `canvas: <count>`
@@ -101,6 +103,16 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
       - `player.displayName?.()`
       - `player.name?.()`
       - `player.isAlive?.()`
+    - reads these additional guarded `myPlayer` fields when present:
+      - `myPlayer.id?.()` or `myPlayer.id`
+      - `myPlayer.smallID?.()` or `myPlayer.smallID`
+      - `myPlayer.displayName?.()` or `myPlayer.displayName`
+      - `myPlayer.name?.()` or `myPlayer.name`
+      - `myPlayer.gold?.()` or `myPlayer.gold`
+      - `myPlayer.troops?.()` or `myPlayer.troops`
+      - `myPlayer.maxTroops?.()` or `myPlayer.maxTroops`
+      - `myPlayer.numTilesOwned?.()` or `myPlayer.numTilesOwned`
+      - `myPlayer.isAlive?.()` or `myPlayer.isAlive`
     - applies these classification rules in order:
       - same `id()` or `smallID()` as `myPlayer` => `me`
       - `type()` or `data.playerType` equals `NATION` => `nation_bot`
@@ -108,6 +120,12 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
       - `isBot?.()` returns `true` => `bot`
       - `isHuman?.()` returns `true`, or `isPlayer?.()` returns `true` and the player is not already bot/nation => `human`
       - otherwise => `unknown`
+    - builds `playersSample` by bucket instead of taking the first 20 players:
+      - always includes `myPlayer` when found
+      - up to 5 `human` opponents
+      - up to 5 `bot`
+      - up to 5 `nation_bot`
+      - up to 5 `unknown`
   - `candidateGlobalKeys`
     - `Object.keys(globalThis)` filtered for keys containing `openfront`, `game`, `runner`, `client`, `lobby`, `map`, or `player`
     - limited to the first 30 matches
@@ -160,7 +178,12 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `playerCount`
   - `totalPlayerViews`
   - `aliveTotal`
+  - `meFound`
   - `myPlayerFound`
+  - `humanOpponentCount`
+  - `aliveHumanOpponentCount`
+  - `humanTotalIncludingMe`
+  - `aliveHumanTotalIncludingMe`
   - `humanPlayerCount`
   - `aliveHumanPlayerCount`
   - `botPlayerCount`
@@ -169,6 +192,7 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `aliveNationBotCount`
   - `unknownPlayerCount`
   - `playersSample`
+  - `myPlayer`
   - `currentTick`
   - `contextKeys`
   - `gameConfigFound`

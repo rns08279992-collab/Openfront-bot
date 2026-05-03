@@ -38,6 +38,25 @@
     latestContextSummary: null
   };
 
+  function formatCountPair(aliveCount, totalCount) {
+    return typeof aliveCount === "number" && typeof totalCount === "number"
+      ? `${aliveCount}/${totalCount}`
+      : "unknown";
+  }
+
+  function getMyPlayerLabel(contextSummary) {
+    if (!contextSummary || !contextSummary.myPlayer) {
+      return "unknown";
+    }
+
+    const myPlayer = contextSummary.myPlayer;
+    return myPlayer.displayName ||
+      myPlayer.name ||
+      (typeof myPlayer.smallID !== "undefined" ? String(myPlayer.smallID) : "") ||
+      (typeof myPlayer.id !== "undefined" ? String(myPlayer.id) : "") ||
+      "unknown";
+  }
+
   function getOverlayLines() {
     const discovery = state.latestDiscovery;
     const contextSummary = state.latestContextSummary;
@@ -48,28 +67,27 @@
         : contextSummary && typeof contextSummary.playerCount === "number"
           ? String(contextSummary.playerCount)
           : "unknown";
-    const humansLine =
-      contextSummary &&
-      typeof contextSummary.aliveHumanPlayerCount === "number" &&
-      typeof contextSummary.humanPlayerCount === "number"
-        ? `${contextSummary.aliveHumanPlayerCount}/${contextSummary.humanPlayerCount}`
-        : "unknown";
-    const botsLine =
-      contextSummary &&
-      typeof contextSummary.aliveBotPlayerCount === "number" &&
-      typeof contextSummary.botPlayerCount === "number"
-        ? `${contextSummary.aliveBotPlayerCount}/${contextSummary.botPlayerCount}`
-        : "unknown";
-    const nationBotsLine =
-      contextSummary &&
-      typeof contextSummary.aliveNationBotCount === "number" &&
-      typeof contextSummary.nationBotCount === "number"
-        ? `${contextSummary.aliveNationBotCount}/${contextSummary.nationBotCount}`
-        : "unknown";
+    const humansLine = formatCountPair(
+      contextSummary ? contextSummary.aliveHumanTotalIncludingMe : null,
+      contextSummary ? contextSummary.humanTotalIncludingMe : null
+    );
+    const humanOpponentsLine = formatCountPair(
+      contextSummary ? contextSummary.aliveHumanOpponentCount : null,
+      contextSummary ? contextSummary.humanOpponentCount : null
+    );
+    const botsLine = formatCountPair(
+      contextSummary ? contextSummary.aliveBotPlayerCount : null,
+      contextSummary ? contextSummary.botPlayerCount : null
+    );
+    const nationBotsLine = formatCountPair(
+      contextSummary ? contextSummary.aliveNationBotCount : null,
+      contextSummary ? contextSummary.nationBotCount : null
+    );
     const unknownCount =
       contextSummary && typeof contextSummary.unknownPlayerCount === "number"
         ? String(contextSummary.unknownPlayerCount)
         : "unknown";
+    const myPlayerLabel = getMyPlayerLabel(contextSummary);
 
     return [
       "extension loaded",
@@ -78,10 +96,12 @@
       `context: ${
         contextSummary && contextSummary.contextFound ? "found" : "not found"
       }`,
+      `me: ${myPlayerLabel}`,
       `players: ${totalPlayerViews}`,
       `humans: ${humansLine}`,
+      `human opponents: ${humanOpponentsLine}`,
       `bots: ${botsLine}`,
-      `nation bots: ${nationBotsLine}`,
+      `nations: ${nationBotsLine}`,
       `unknown: ${unknownCount}`,
       `config: ${
         contextSummary && contextSummary.gameConfigFound ? "found" : "not found"

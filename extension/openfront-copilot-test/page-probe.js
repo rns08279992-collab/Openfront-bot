@@ -77,6 +77,8 @@
     "remember",
     "ensure"
   ];
+  const SAMPLE_BUCKET_LIMIT = 5;
+  const MAX_PLAYERS_SAMPLE_COUNT = 1 + SAMPLE_BUCKET_LIMIT * 4;
 
   function includesHint(value, hints) {
     const normalizedValue = String(value || "").toLowerCase();
@@ -252,6 +254,19 @@
     }
   }
 
+  function safeReadValue(value, name) {
+    if (!value || (typeof value !== "object" && typeof value !== "function")) {
+      return undefined;
+    }
+
+    const propertyValue = readProperty(value, name);
+    if (typeof propertyValue === "function") {
+      return safeZeroArgCall(value, name);
+    }
+
+    return propertyValue;
+  }
+
   function normalizePlayerType(value) {
     if (typeof value !== "string") {
       return "";
@@ -349,11 +364,43 @@
     };
   }
 
+  function buildMyPlayerDetails(myPlayer) {
+    if (!myPlayer || (typeof myPlayer !== "object" && typeof myPlayer !== "function")) {
+      return null;
+    }
+
+    return {
+      id: safeReadValue(myPlayer, "id"),
+      smallID: safeReadValue(myPlayer, "smallID"),
+      displayName: safeReadValue(myPlayer, "displayName"),
+      name: safeReadValue(myPlayer, "name"),
+      gold: safeReadValue(myPlayer, "gold"),
+      troops: safeReadValue(myPlayer, "troops"),
+      maxTroops: safeReadValue(myPlayer, "maxTroops"),
+      numTilesOwned: safeReadValue(myPlayer, "numTilesOwned"),
+      isAlive: safeReadValue(myPlayer, "isAlive")
+    };
+  }
+
+  function addPlayerSampleToBucket(buckets, classification, player, myPlayer) {
+    const bucket = buckets[classification];
+    if (!bucket || bucket.length >= SAMPLE_BUCKET_LIMIT) {
+      return;
+    }
+
+    bucket.push(buildPlayerSample(player, myPlayer));
+  }
+
   function summarizePlayers(playerViews, myPlayer) {
     const summary = {
       totalPlayerViews: Array.isArray(playerViews) ? playerViews.length : 0,
       aliveTotal: 0,
+      meFound: false,
       myPlayerFound: false,
+      humanOpponentCount: 0,
+      aliveHumanOpponentCount: 0,
+      humanTotalIncludingMe: 0,
+      aliveHumanTotalIncludingMe: 0,
       humanPlayerCount: 0,
       aliveHumanPlayerCount: 0,
       botPlayerCount: 0,
@@ -361,12 +408,20 @@
       nationBotCount: 0,
       aliveNationBotCount: 0,
       unknownPlayerCount: 0,
-      playersSample: []
+      playersSample: [],
+      myPlayer: buildMyPlayerDetails(myPlayer)
     };
 
     if (!Array.isArray(playerViews)) {
       return summary;
     }
+
+    const sampleBuckets = {
+      human: [],
+      bot: [],
+      nation_bot: [],
+      unknown: []
+    };
 
     for (const player of playerViews) {
       const classification = classifyPlayer(player, myPlayer);
@@ -377,30 +432,52 @@
       }
 
       if (classification === "me") {
+        summary.meFound = true;
         summary.myPlayerFound = true;
+        summary.humanTotalIncludingMe += 1;
+        if (isAlive) {
+          summary.aliveHumanTotalIncludingMe += 1;
+        }
       } else if (classification === "human") {
+        summary.humanOpponentCount += 1;
+        summary.humanTotalIncludingMe += 1;
         summary.humanPlayerCount += 1;
         if (isAlive) {
+          summary.aliveHumanOpponentCount += 1;
+          summary.aliveHumanTotalIncludingMe += 1;
           summary.aliveHumanPlayerCount += 1;
         }
+        addPlayerSampleToBucket(sampleBuckets, "human", player, myPlayer);
       } else if (classification === "bot") {
         summary.botPlayerCount += 1;
         if (isAlive) {
           summary.aliveBotPlayerCount += 1;
         }
+        addPlayerSampleToBucket(sampleBuckets, "bot", player, myPlayer);
       } else if (classification === "nation_bot") {
         summary.nationBotCount += 1;
         if (isAlive) {
           summary.aliveNationBotCount += 1;
         }
+        addPlayerSampleToBucket(sampleBuckets, "nation_bot", player, myPlayer);
       } else {
         summary.unknownPlayerCount += 1;
-      }
-
-      if (summary.playersSample.length < 20) {
-        summary.playersSample.push(buildPlayerSample(player, myPlayer));
+        addPlayerSampleToBucket(sampleBuckets, "unknown", player, myPlayer);
       }
     }
+
+    summary.playersSample = [];
+
+    if (summary.meFound) {
+      summary.playersSample.push(buildPlayerSample(myPlayer, myPlayer));
+    }
+
+    summary.playersSample = summary.playersSample
+      .concat(sampleBuckets.human)
+      .concat(sampleBuckets.bot)
+      .concat(sampleBuckets.nation_bot)
+      .concat(sampleBuckets.unknown)
+      .slice(0, MAX_PLAYERS_SAMPLE_COUNT);
 
     return summary;
   }
@@ -502,7 +579,12 @@
       transformSourceProperty: null,
       totalPlayerViews: null,
       aliveTotal: null,
+      meFound: false,
       myPlayerFound: false,
+      humanOpponentCount: null,
+      aliveHumanOpponentCount: null,
+      humanTotalIncludingMe: null,
+      aliveHumanTotalIncludingMe: null,
       humanPlayerCount: null,
       aliveHumanPlayerCount: null,
       botPlayerCount: null,
@@ -511,6 +593,7 @@
       aliveNationBotCount: null,
       unknownPlayerCount: null,
       playersSample: [],
+      myPlayer: null,
       currentTick: null,
       errors: []
     };
@@ -546,7 +629,13 @@
         const playerSummary = summarizePlayers(playerViews, myPlayer);
         usablePair.totalPlayerViews = playerSummary.totalPlayerViews;
         usablePair.aliveTotal = playerSummary.aliveTotal;
+        usablePair.meFound = playerSummary.meFound;
         usablePair.myPlayerFound = playerSummary.myPlayerFound;
+        usablePair.humanOpponentCount = playerSummary.humanOpponentCount;
+        usablePair.aliveHumanOpponentCount = playerSummary.aliveHumanOpponentCount;
+        usablePair.humanTotalIncludingMe = playerSummary.humanTotalIncludingMe;
+        usablePair.aliveHumanTotalIncludingMe =
+          playerSummary.aliveHumanTotalIncludingMe;
         usablePair.humanPlayerCount = playerSummary.humanPlayerCount;
         usablePair.aliveHumanPlayerCount = playerSummary.aliveHumanPlayerCount;
         usablePair.botPlayerCount = playerSummary.botPlayerCount;
@@ -555,6 +644,7 @@
         usablePair.aliveNationBotCount = playerSummary.aliveNationBotCount;
         usablePair.unknownPlayerCount = playerSummary.unknownPlayerCount;
         usablePair.playersSample = playerSummary.playersSample;
+        usablePair.myPlayer = playerSummary.myPlayer;
       } catch (error) {
         usablePair.errors.push({
           name: "playerViews",
@@ -761,6 +851,23 @@
           : null,
       myPlayerFound:
         domContext && domContext.contextFound ? domContext.myPlayerFound : false,
+      meFound: domContext && domContext.contextFound ? domContext.meFound : false,
+      humanOpponentCount:
+        domContext && typeof domContext.humanOpponentCount === "number"
+          ? domContext.humanOpponentCount
+          : null,
+      aliveHumanOpponentCount:
+        domContext && typeof domContext.aliveHumanOpponentCount === "number"
+          ? domContext.aliveHumanOpponentCount
+          : null,
+      humanTotalIncludingMe:
+        domContext && typeof domContext.humanTotalIncludingMe === "number"
+          ? domContext.humanTotalIncludingMe
+          : null,
+      aliveHumanTotalIncludingMe:
+        domContext && typeof domContext.aliveHumanTotalIncludingMe === "number"
+          ? domContext.aliveHumanTotalIncludingMe
+          : null,
       humanPlayerCount:
         domContext && typeof domContext.humanPlayerCount === "number"
           ? domContext.humanPlayerCount
@@ -789,7 +896,10 @@
         domContext && typeof domContext.unknownPlayerCount === "number"
           ? domContext.unknownPlayerCount
           : null,
-      playersSample: domContext ? limitArray(domContext.playersSample, 20) : [],
+      playersSample: domContext
+        ? limitArray(domContext.playersSample, MAX_PLAYERS_SAMPLE_COUNT)
+        : [],
+      myPlayer: domContext ? domContext.myPlayer : null,
       currentTick:
         domContext && domContext.contextFound ? domContext.currentTick : null,
       aliveHumanPlayersCount: Array.isArray(playersValue) ? playersValue.length : null,
