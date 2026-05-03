@@ -1,6 +1,6 @@
 (function () {
   const OVERLAY_ID = "openfront-copilot-test-overlay";
-  const JSON_PANEL_ID = "openfront-copilot-test-json-panel";
+  const JSON_PANEL_ID = "openfront-copilot-json-panel";
   const PROBE_MESSAGE_TYPE = "OPENFRONT_COPILOT_RUNTIME_STATUS";
   const PROBE_SCRIPT_ID = "openfront-copilot-test-page-probe";
 
@@ -79,7 +79,34 @@
       : "unknown";
   }
 
-  function formatTroopPair(threatSummary, contextSummary) {
+  function formatCompactNumber(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return "unknown";
+    }
+
+    const absoluteValue = Math.abs(value);
+    if (absoluteValue < 1000) {
+      return String(value);
+    }
+
+    const units = [
+      { threshold: 1e9, suffix: "B" },
+      { threshold: 1e6, suffix: "M" },
+      { threshold: 1e3, suffix: "K" }
+    ];
+
+    for (const unit of units) {
+      if (absoluteValue >= unit.threshold) {
+        const scaled = value / unit.threshold;
+        const decimals = Math.abs(scaled) < 10 ? 2 : 1;
+        return `${scaled.toFixed(decimals)}${unit.suffix}`;
+      }
+    }
+
+    return String(value);
+  }
+
+  function formatTroopPair(contextSummary) {
     const myPlayer = contextSummary && contextSummary.myPlayer ? contextSummary.myPlayer : null;
     const controlPanelStats =
       contextSummary && contextSummary.controlPanelStats
@@ -89,9 +116,9 @@
       myPlayer && typeof myPlayer.troops === "number" && Number.isFinite(myPlayer.troops)
         ? myPlayer.troops
         : controlPanelStats &&
-            typeof controlPanelStats.troops === "number" &&
-            Number.isFinite(controlPanelStats.troops)
-          ? controlPanelStats.troops
+            typeof controlPanelStats.troopsDisplay === "number" &&
+            Number.isFinite(controlPanelStats.troopsDisplay)
+          ? controlPanelStats.troopsDisplay
           : null;
     const maxTroops =
       myPlayer &&
@@ -99,12 +126,12 @@
       Number.isFinite(myPlayer.maxTroops)
         ? myPlayer.maxTroops
         : controlPanelStats &&
-            typeof controlPanelStats.maxTroops === "number" &&
-            Number.isFinite(controlPanelStats.maxTroops)
-          ? controlPanelStats.maxTroops
+            typeof controlPanelStats.maxTroopsDisplay === "number" &&
+            Number.isFinite(controlPanelStats.maxTroopsDisplay)
+          ? controlPanelStats.maxTroopsDisplay
           : null;
 
-    return `${formatFiniteNumber(troops)}/${formatFiniteNumber(maxTroops)}`;
+    return `${formatCompactNumber(troops)}/${formatCompactNumber(maxTroops)}`;
   }
 
   function formatTroopRatio(threatSummary) {
@@ -163,7 +190,7 @@
       `bots: ${botsLine}`,
       `nations: ${nationBotsLine}`,
       `unknown: ${unknownCount}`,
-      `troops: ${formatTroopPair(threatSummary, contextSummary)}`,
+      `troops: ${formatTroopPair(contextSummary)}`,
       `troop ratio: ${formatTroopRatio(threatSummary)}`,
       `stats source: ${threatSummary ? threatSummary.statsSource || "unknown" : "unknown"}`,
       `threat status: ${threatSummary ? threatSummary.status : "unknown"}`,
@@ -204,6 +231,22 @@
     }
 
     return JSON.stringify(state.latestContextSummary, null, 2);
+  }
+
+  function buildPublicSnapshotPanelPayload(contextSummary) {
+    if (!contextSummary) {
+      return {
+        text: "",
+        status: "No public snapshot available yet",
+        isError: true
+      };
+    }
+
+    return {
+      text: JSON.stringify(contextSummary, null, 2),
+      status: "opened public snapshot JSON",
+      isError: false
+    };
   }
 
   function getDomProbeJson() {
@@ -277,8 +320,8 @@
       panel.style.padding = "16px";
       panel.style.border = "1px solid rgba(148, 163, 184, 0.45)";
       panel.style.borderRadius = "10px";
-      panel.style.background = "rgba(2, 6, 23, 0.98)";
-      panel.style.color = "#e2e8f0";
+      panel.style.background = "#0f172a";
+      panel.style.color = "white";
       panel.style.boxShadow = "0 16px 48px rgba(2, 6, 23, 0.55)";
       panel.style.font = '12px/1.4 ui-monospace, "SFMono-Regular", Consolas, monospace';
 
@@ -305,8 +348,8 @@
       textarea.style.boxSizing = "border-box";
       textarea.style.border = "1px solid rgba(148, 163, 184, 0.45)";
       textarea.style.borderRadius = "8px";
-      textarea.style.background = "rgba(15, 23, 42, 0.98)";
-      textarea.style.color = "#f8fafc";
+      textarea.style.background = "#0f172a";
+      textarea.style.color = "white";
       textarea.style.padding = "12px";
       textarea.style.resize = "none";
       textarea.style.font = "inherit";
@@ -364,8 +407,23 @@
       document.body.appendChild(panel);
     }
 
+    panel.style.position = "fixed";
+    panel.style.left = "24px";
+    panel.style.top = "24px";
+    panel.style.width = "min(900px, 70vw)";
+    panel.style.height = "min(700px, 70vh)";
+    panel.style.zIndex = "2147483647";
+    panel.style.display = state.jsonPanelVisible ? "block" : "none";
+    panel.style.pointerEvents = "auto";
+    panel.style.background = "#0f172a";
+    panel.style.color = "white";
+
+    const title = panel.querySelector('[data-role="json-title"]');
     const statusLine = panel.querySelector('[data-role="json-status"]');
     const textarea = panel.querySelector('[data-role="json-textarea"]');
+    if (title) {
+      title.textContent = state.jsonPanelKind || "Public Snapshot JSON";
+    }
     if (statusLine) {
       statusLine.textContent = state.jsonPanelStatus;
       statusLine.style.color = state.jsonPanelIsError ? "#fca5a5" : "#93c5fd";
@@ -373,8 +431,6 @@
     if (textarea) {
       textarea.value = state.jsonPanelText;
     }
-
-    panel.style.display = state.jsonPanelVisible ? "block" : "none";
     return panel;
   }
 
@@ -384,16 +440,14 @@
   }
 
   function refreshPublicSnapshotPanel() {
-    if (!state.jsonPanelVisible || state.jsonPanelKind !== "public snapshot") {
+    if (!state.jsonPanelVisible || state.jsonPanelKind !== "Public Snapshot JSON") {
       return;
     }
 
-    const text = getPublicSnapshotJson();
-    state.jsonPanelText = text;
-    state.jsonPanelStatus = text
-      ? "opened public snapshot JSON"
-      : "No public snapshot available yet";
-    state.jsonPanelIsError = !text;
+    const payload = buildPublicSnapshotPanelPayload(state.latestContextSummary);
+    state.jsonPanelText = payload.text;
+    state.jsonPanelStatus = payload.status;
+    state.jsonPanelIsError = payload.isError;
     ensureJsonPanel();
   }
 
@@ -416,6 +470,18 @@
       textarea.focus();
       textarea.select();
     }
+  }
+
+  function openJsonPanel(title, contextSummary) {
+    const payload = buildPublicSnapshotPanelPayload(contextSummary);
+    console.debug("[openfront-copilot-test] opening JSON panel", title, {
+      hasSnapshot: Boolean(contextSummary)
+    });
+    showJsonPanel(title, payload.text, payload.status, payload.isError);
+    console.debug("[openfront-copilot-test] opened JSON panel", title, {
+      hasSnapshot: Boolean(contextSummary),
+      textLength: payload.text.length
+    });
   }
 
   function selectVisibleJson() {
@@ -567,6 +633,12 @@
     updateButtonDebug(kind, event.type);
     setOverlayStatus(`button pressed: ${kind}`);
     if (event.type !== "click") {
+      return;
+    }
+
+    if (kind.includes("public snapshot")) {
+      openJsonPanel("Public Snapshot JSON", state.latestContextSummary);
+      setOverlayStatus("opened public snapshot JSON");
       return;
     }
 

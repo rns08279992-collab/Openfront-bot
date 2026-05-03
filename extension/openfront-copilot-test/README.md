@@ -33,7 +33,7 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `bots: <alive>/<total>` or `bots: unknown`
   - `nations: <alive>/<total>` or `nations: unknown`
   - `unknown: <count>` or `unknown: unknown`
-  - `troops: <current>/<max>` or `troops: unknown/unknown`
+  - `troops: <currentDisplay>/<maxDisplay>` or `troops: unknown/unknown`
   - `troop ratio: <ratio>` or `troop ratio: unknown`
   - `stats source: myPlayer|control-panel fallback|unknown`
   - `threat status: <safe|watch|danger|unknown>`
@@ -203,9 +203,12 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `myPlayer`
   - `controlPanelStats`
     - `found`
-    - `troops`
-    - `maxTroops`
-    - `gold`
+    - `troopsRaw`
+    - `maxTroopsRaw`
+    - `goldRaw`
+    - `troopsDisplay`
+    - `maxTroopsDisplay`
+    - `goldDisplay`
     - `troopRate`
     - `attackRatio`
     - `attackingTroops`
@@ -239,13 +242,15 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
 
 - Click `copy discovery JSON` in the overlay to copy the latest discovery snapshot to the clipboard.
 - The copy payload is read-only JSON from the most recent page probe result.
-- Click `copy public snapshot JSON` to copy the compact safe-call public snapshot, including `threatSummary`.
+- `copy public snapshot JSON` and `show public snapshot JSON` both open the fixed public snapshot viewer immediately.
 - Click `copy DOM probe JSON` to copy the element/property scan and any usable DOM-derived context metadata.
 - All overlay button handling is delegated from the overlay root and listens on `pointerdown`, `mousedown`, and `click`.
 - The overlay debug lines include `buttonEvents`, `lastButtonKind`, and `lastButtonEventType` so you can verify whether the page is delivering button events to the overlay.
-- `show public snapshot JSON` always opens or refreshes a fixed viewer panel mounted directly under `document.body`, independent from overlay layout or clipboard access.
+- Any overlay button whose kind includes `public snapshot` immediately opens or refreshes a fixed viewer panel mounted directly under `document.body`, independent from overlay layout or clipboard access.
+- The panel root id is `openfront-copilot-json-panel`.
 - The viewer panel uses `position: fixed`, `left: 24px`, `top: 24px`, `width: min(900px, 70vw)`, `height: min(700px, 70vh)`, `z-index: 2147483647`, `pointer-events: auto`, and a dark background.
-- Copy actions first open or refresh that same fixed JSON panel, then try `navigator.clipboard.writeText(...)`, then fall back to `document.execCommand("copy")`.
+- The content script emits `console.debug(...)` immediately before and after opening the panel.
+- Discovery and DOM probe copy actions first open or refresh that same fixed JSON panel, then try `navigator.clipboard.writeText(...)`, then fall back to `document.execCommand("copy")`.
 - When both copy paths fail, the overlay shows `copy failed: <short error>` and leaves the visible JSON textarea open for manual selection and copy.
 - When no public snapshot is available yet, the panel shows `No public snapshot available yet` as a visible error state.
 - The JSON panel includes `Select JSON` and `Close` buttons.
@@ -264,7 +269,8 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
 - Only finite numbers are kept; formatted strings may be parsed when they use safe `K`, `M`, or `B` suffixes.
 - Never calls any control-panel action or mutation methods.
 - Threat summary prefers `snapshot.myPlayer.troops` and `snapshot.myPlayer.maxTroops` when valid.
-- Threat summary falls back to `snapshot.controlPanelStats.troops` and `snapshot.controlPanelStats.maxTroops` when needed.
+- Threat summary falls back to `snapshot.controlPanelStats.troopsRaw` and `snapshot.controlPanelStats.maxTroopsRaw` when needed.
+- Control-panel fallback keeps raw values in JSON and derives display-only troop values by dividing `troopsRaw` and `maxTroopsRaw` by `10`.
 - Returns `unknown` status and urgency when either `troops` or `maxTroops` is unavailable after fallback.
 - Returns `danger` with `high` urgency when `troops / maxTroops < 0.25`.
 - Returns `watch` with `medium` urgency when `troops / maxTroops < 0.45`.

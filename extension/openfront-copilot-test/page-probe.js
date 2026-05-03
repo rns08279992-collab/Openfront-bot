@@ -416,9 +416,12 @@
   function buildReadOnlyControlPanelStats() {
     const stats = {
       found: false,
-      troops: null,
-      maxTroops: null,
-      gold: null,
+      troopsRaw: null,
+      maxTroopsRaw: null,
+      goldRaw: null,
+      troopsDisplay: null,
+      maxTroopsDisplay: null,
+      goldDisplay: null,
       troopRate: null,
       attackRatio: null,
       attackingTroops: null,
@@ -433,9 +436,9 @@
     stats.found = true;
 
     const reads = [
-      { sourceName: "_troops", targetName: "troops" },
-      { sourceName: "_maxTroops", targetName: "maxTroops" },
-      { sourceName: "_gold", targetName: "gold" },
+      { sourceName: "_troops", targetName: "troopsRaw" },
+      { sourceName: "_maxTroops", targetName: "maxTroopsRaw" },
+      { sourceName: "_gold", targetName: "goldRaw" },
       { sourceName: "troopRate", targetName: "troopRate" },
       { sourceName: "attackRatio", targetName: "attackRatio" },
       { sourceName: "_attackingTroops", targetName: "attackingTroops" }
@@ -451,6 +454,12 @@
         });
       }
     }
+
+    stats.troopsDisplay = Number.isFinite(stats.troopsRaw) ? stats.troopsRaw / 10 : null;
+    stats.maxTroopsDisplay = Number.isFinite(stats.maxTroopsRaw)
+      ? stats.maxTroopsRaw / 10
+      : null;
+    stats.goldDisplay = Number.isFinite(stats.goldRaw) ? stats.goldRaw : null;
 
     return stats;
   }
@@ -471,11 +480,11 @@
     const myPlayerMaxTroops = myPlayer ? coerceFiniteNumber(myPlayer.maxTroops) : null;
     const fallbackTroops =
       controlPanelStats && controlPanelStats.found
-        ? coerceFiniteNumber(controlPanelStats.troops)
+        ? coerceFiniteNumber(controlPanelStats.troopsRaw)
         : null;
     const fallbackMaxTroops =
       controlPanelStats && controlPanelStats.found
-        ? coerceFiniteNumber(controlPanelStats.maxTroops)
+        ? coerceFiniteNumber(controlPanelStats.maxTroopsRaw)
         : null;
     const troops = Number.isFinite(myPlayerTroops) ? myPlayerTroops : fallbackTroops;
     const maxTroops = Number.isFinite(myPlayerMaxTroops)
