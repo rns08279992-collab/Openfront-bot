@@ -382,6 +382,106 @@
     };
   }
 
+  function buildReadOnlyThreatSummary(snapshot) {
+    const myPlayer = snapshot && snapshot.myPlayer ? snapshot.myPlayer : null;
+    const humanOpponentCount =
+      snapshot && typeof snapshot.humanOpponentCount === "number"
+        ? snapshot.humanOpponentCount
+        : null;
+    const botPlayerCount =
+      snapshot && typeof snapshot.botPlayerCount === "number"
+        ? snapshot.botPlayerCount
+        : null;
+    const troops =
+      myPlayer && typeof myPlayer.troops === "number" ? myPlayer.troops : null;
+    const maxTroops =
+      myPlayer && typeof myPlayer.maxTroops === "number" ? myPlayer.maxTroops : null;
+    const reasons = [];
+    const suggestions = [];
+
+    if (!myPlayer) {
+      reasons.push("my player data unavailable");
+    }
+
+    if (myPlayer && troops === null) {
+      reasons.push("troops unavailable");
+    }
+
+    if (myPlayer && maxTroops === null) {
+      reasons.push("max troops unavailable");
+    }
+
+    if (!myPlayer || troops === null || maxTroops === null) {
+      if (humanOpponentCount > 0) {
+        suggestions.push("monitor human opponents");
+      }
+      if (humanOpponentCount === 0 && botPlayerCount > 0) {
+        suggestions.push("bot-only match: economy focus");
+      }
+
+      return {
+        status: "unknown",
+        urgency: "unknown",
+        reasons,
+        suggestions
+      };
+    }
+
+    const troopRatio = maxTroops > 0 ? troops / maxTroops : 0;
+    const lowTroops = troopRatio < 0.45;
+    const veryLowTroops = troopRatio < 0.25;
+    const hasHumanOpponents = humanOpponentCount > 0;
+
+    if (veryLowTroops) {
+      reasons.push(`low troop ratio (${troops}/${maxTroops})`);
+    } else if (lowTroops) {
+      reasons.push(`watch troop ratio (${troops}/${maxTroops})`);
+    }
+
+    if (hasHumanOpponents) {
+      reasons.push(`human opponents present (${humanOpponentCount})`);
+    }
+
+    if (!lowTroops && !hasHumanOpponents) {
+      reasons.push("troops stable and no human opponents");
+    }
+
+    if (lowTroops) {
+      suggestions.push("grow before fighting");
+    }
+    if (hasHumanOpponents) {
+      suggestions.push("monitor human opponents");
+    }
+    if (humanOpponentCount === 0 && botPlayerCount > 0) {
+      suggestions.push("bot-only match: economy focus");
+    }
+
+    if (veryLowTroops) {
+      return {
+        status: "danger",
+        urgency: "high",
+        reasons,
+        suggestions
+      };
+    }
+
+    if (lowTroops || hasHumanOpponents) {
+      return {
+        status: "watch",
+        urgency: "medium",
+        reasons,
+        suggestions
+      };
+    }
+
+    return {
+      status: "safe",
+      urgency: "low",
+      reasons,
+      suggestions
+    };
+  }
+
   function addPlayerSampleToBucket(buckets, classification, player, myPlayer) {
     const bucket = buckets[classification];
     if (!bucket || bucket.length >= SAMPLE_BUCKET_LIMIT) {
@@ -824,7 +924,7 @@
     const playersValue = playersResult && playersResult.called ? playersResult.result : null;
     const domContext = domProbe && domProbe.usablePair ? domProbe.usablePair : null;
 
-    return {
+    const contextSummary = {
       contextFound: Boolean((domContext && domContext.contextFound) || contextValue),
       contextKeys: limitKeys(contextValue, 50),
       gameConfigFound: Boolean(configValue),
@@ -928,6 +1028,10 @@
         }))
         .concat(limitArray(domContext ? domContext.errors : [], 20))
     };
+
+    contextSummary.threatSummary = buildReadOnlyThreatSummary(contextSummary);
+
+    return contextSummary;
   }
 
   function collectRuntimeStatus() {

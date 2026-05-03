@@ -57,9 +57,19 @@
       "unknown";
   }
 
+  function formatSummaryList(items) {
+    return Array.isArray(items) && items.length > 0
+      ? items.slice(0, 2).join(" | ")
+      : "none";
+  }
+
   function getOverlayLines() {
     const discovery = state.latestDiscovery;
     const contextSummary = state.latestContextSummary;
+    const threatSummary =
+      contextSummary && contextSummary.threatSummary
+        ? contextSummary.threatSummary
+        : null;
     const pageState = discovery ? discovery.pageState || {} : {};
     const totalPlayerViews =
       contextSummary && typeof contextSummary.totalPlayerViews === "number"
@@ -103,6 +113,12 @@
       `bots: ${botsLine}`,
       `nations: ${nationBotsLine}`,
       `unknown: ${unknownCount}`,
+      `threat status: ${threatSummary ? threatSummary.status : "unknown"}`,
+      `threat urgency: ${threatSummary ? threatSummary.urgency : "unknown"}`,
+      `threat reasons: ${formatSummaryList(threatSummary ? threatSummary.reasons : [])}`,
+      `threat suggestions: ${formatSummaryList(
+        threatSummary ? threatSummary.suggestions : []
+      )}`,
       `config: ${
         contextSummary && contextSummary.gameConfigFound ? "found" : "not found"
       }`,
@@ -131,13 +147,13 @@
     copyJsonText(button, discoveryJson, "copy discovery JSON");
   }
 
-  function getContextJson() {
+  function getPublicSnapshotJson() {
     return JSON.stringify(state.latestContextSummary || {}, null, 2);
   }
 
-  function copyContextJson(button) {
-    const contextJson = getContextJson();
-    copyJsonText(button, contextJson, "copy context JSON");
+  function copyPublicSnapshotJson(button) {
+    const contextJson = getPublicSnapshotJson();
+    copyJsonText(button, contextJson, "copy public snapshot JSON");
   }
 
   function getDomProbeJson() {
@@ -232,24 +248,24 @@
       });
       overlay.appendChild(copyButton);
 
-      const copyContextButton = document.createElement("button");
-      copyContextButton.type = "button";
-      copyContextButton.textContent = "copy context JSON";
-      copyContextButton.style.display = "block";
-      copyContextButton.style.marginTop = "6px";
-      copyContextButton.style.padding = "0";
-      copyContextButton.style.border = "0";
-      copyContextButton.style.background = "transparent";
-      copyContextButton.style.color = "#93c5fd";
-      copyContextButton.style.cursor = "pointer";
-      copyContextButton.style.font = "inherit";
-      copyContextButton.style.textDecoration = "underline";
-      copyContextButton.addEventListener("click", function (event) {
+      const copyPublicSnapshotButton = document.createElement("button");
+      copyPublicSnapshotButton.type = "button";
+      copyPublicSnapshotButton.textContent = "copy public snapshot JSON";
+      copyPublicSnapshotButton.style.display = "block";
+      copyPublicSnapshotButton.style.marginTop = "6px";
+      copyPublicSnapshotButton.style.padding = "0";
+      copyPublicSnapshotButton.style.border = "0";
+      copyPublicSnapshotButton.style.background = "transparent";
+      copyPublicSnapshotButton.style.color = "#93c5fd";
+      copyPublicSnapshotButton.style.cursor = "pointer";
+      copyPublicSnapshotButton.style.font = "inherit";
+      copyPublicSnapshotButton.style.textDecoration = "underline";
+      copyPublicSnapshotButton.addEventListener("click", function (event) {
         event.preventDefault();
         event.stopPropagation();
-        copyContextJson(copyContextButton);
+        copyPublicSnapshotJson(copyPublicSnapshotButton);
       });
-      overlay.appendChild(copyContextButton);
+      overlay.appendChild(copyPublicSnapshotButton);
 
       const copyDomProbeButton = document.createElement("button");
       copyDomProbeButton.type = "button";

@@ -33,6 +33,10 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `bots: <alive>/<total>` or `bots: unknown`
   - `nations: <alive>/<total>` or `nations: unknown`
   - `unknown: <count>` or `unknown: unknown`
+  - `threat status: <safe|watch|danger|unknown>`
+  - `threat urgency: <low|medium|high|unknown>`
+  - `threat reasons: <first 2 reasons>` or `threat reasons: none`
+  - `threat suggestions: <first 2 suggestions>` or `threat suggestions: none`
   - `config: found` or `config: not found`
   - `canvas: <count>`
   - `path: <pathname>`
@@ -41,7 +45,7 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `mode: read-only`
   - `no actions enabled`
   - `copy discovery JSON`
-  - `copy context JSON`
+  - `copy public snapshot JSON`
   - `copy DOM probe JSON`
 - Injects `page-probe.js` into the page world through `chrome.runtime.getURL(...)`
 - Activates on every matched OpenFront or localhost route without requiring a query parameter
@@ -193,6 +197,11 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `unknownPlayerCount`
   - `playersSample`
   - `myPlayer`
+  - `threatSummary`
+    - `status`
+    - `urgency`
+    - `reasons`
+    - `suggestions`
   - `currentTick`
   - `contextKeys`
   - `gameConfigFound`
@@ -215,8 +224,20 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
 
 - Click `copy discovery JSON` in the overlay to copy the latest discovery snapshot to the clipboard.
 - The copy payload is read-only JSON from the most recent page probe result.
-- Click `copy context JSON` to copy the compact safe-call context summary.
+- Click `copy public snapshot JSON` to copy the compact safe-call public snapshot, including `threatSummary`.
 - Click `copy DOM probe JSON` to copy the element/property scan and any usable DOM-derived context metadata.
+
+## Threat summary rules
+
+- `buildReadOnlyThreatSummary(snapshot)` uses only the existing public snapshot data already collected by the page probe.
+- Returns `unknown` status and urgency when `myPlayer` is missing or either `troops` or `maxTroops` is unavailable.
+- Returns `danger` with `high` urgency when `myPlayer.troops / myPlayer.maxTroops < 0.25`.
+- Returns `watch` with `medium` urgency when `myPlayer.troops / myPlayer.maxTroops < 0.45`.
+- Returns `watch` with `medium` urgency when `humanOpponentCount > 0`.
+- Returns `safe` with `low` urgency when `myPlayer.troops / myPlayer.maxTroops >= 0.45` and `humanOpponentCount === 0`.
+- Adds `grow before fighting` when troop ratio is below `0.45`.
+- Adds `monitor human opponents` when `humanOpponentCount > 0`.
+- Adds `bot-only match: economy focus` when `humanOpponentCount === 0` and `botPlayerCount > 0`.
 
 ## What it does not do
 
