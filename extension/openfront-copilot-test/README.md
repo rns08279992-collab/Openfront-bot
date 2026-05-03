@@ -47,6 +47,7 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
   - `copy discovery JSON`
   - `copy public snapshot JSON`
   - `copy DOM probe JSON`
+  - `show public snapshot JSON`
 - Injects `page-probe.js` into the page world through `chrome.runtime.getURL(...)`
 - Activates on every matched OpenFront or localhost route without requiring a query parameter
 - Polls once per second for these known runtime globals without mutating them:
@@ -228,10 +229,12 @@ On localhost only, `localStorage["openfront-copilot-enabled"] = "1"` remains ava
 - Click `copy DOM probe JSON` to copy the element/property scan and any usable DOM-derived context metadata.
 - All overlay button handling is delegated from the overlay root and listens on `pointerdown`, `mousedown`, and `click`.
 - The overlay debug lines include `buttonEvents`, `lastButtonKind`, and `lastButtonEventType` so you can verify whether the page is delivering button events to the overlay.
-- `show public snapshot JSON` always opens or refreshes a visible read-only textarea panel with the current JSON and does not depend on clipboard access.
-- Copy actions first open or refresh that visible JSON panel, then try `navigator.clipboard.writeText(...)`, then fall back to `document.execCommand("copy")`.
+- `show public snapshot JSON` always opens or refreshes a fixed viewer panel mounted directly under `document.body`, independent from overlay layout or clipboard access.
+- The viewer panel uses `position: fixed`, `left: 24px`, `top: 24px`, `width: min(900px, 70vw)`, `height: min(700px, 70vh)`, `z-index: 2147483647`, `pointer-events: auto`, and a dark background.
+- Copy actions first open or refresh that same fixed JSON panel, then try `navigator.clipboard.writeText(...)`, then fall back to `document.execCommand("copy")`.
 - When both copy paths fail, the overlay shows `copy failed: <short error>` and leaves the visible JSON textarea open for manual selection and copy.
-- The JSON panel includes a `select JSON` button that calls `textarea.select()` on the visible textarea.
+- When no public snapshot is available yet, the panel shows `No public snapshot available yet` as a visible error state.
+- The JSON panel includes `Select JSON` and `Close` buttons.
 
 ## Threat summary rules
 

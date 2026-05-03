@@ -1,5 +1,6 @@
 (function () {
   const OVERLAY_ID = "openfront-copilot-test-overlay";
+  const JSON_PANEL_ID = "openfront-copilot-test-json-panel";
   const PROBE_MESSAGE_TYPE = "OPENFRONT_COPILOT_RUNTIME_STATUS";
   const PROBE_SCRIPT_ID = "openfront-copilot-test-page-probe";
 
@@ -39,10 +40,12 @@
     overlayStatus: "status: ready",
     jsonPanelVisible: false,
     jsonPanelKind: null,
+    jsonPanelText: "",
+    jsonPanelStatus: "status: ready",
+    jsonPanelIsError: false,
     buttonEvents: 0,
     lastButtonKind: "none",
-    lastButtonEventType: "none",
-    lastHandledButtonSignature: null
+    lastButtonEventType: "none"
   };
 
   function formatCountPair(aliveCount, totalCount) {
@@ -153,7 +156,11 @@
   }
 
   function getPublicSnapshotJson() {
-    return JSON.stringify(state.latestContextSummary || {}, null, 2);
+    if (!state.latestContextSummary) {
+      return "";
+    }
+
+    return JSON.stringify(state.latestContextSummary, null, 2);
   }
 
   function getDomProbeJson() {
@@ -206,35 +213,175 @@
     return JSON.stringify({}, null, 2);
   }
 
-  function showJsonPanel(kind, text) {
-    const overlay = ensureOverlay();
-    if (!overlay) {
+  function ensureJsonPanel() {
+    if (!document.body) {
       return;
     }
 
-    const panel = overlay.querySelector('[data-role="json-panel"]');
-    const labelNode = overlay.querySelector('[data-role="json-label"]');
-    const textarea = overlay.querySelector('[data-role="json-textarea"]');
-    if (!panel || !labelNode || !textarea) {
+    let panel = document.getElementById(JSON_PANEL_ID);
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = JSON_PANEL_ID;
+      panel.style.position = "fixed";
+      panel.style.left = "24px";
+      panel.style.top = "24px";
+      panel.style.width = "min(900px, 70vw)";
+      panel.style.height = "min(700px, 70vh)";
+      panel.style.zIndex = "2147483647";
+      panel.style.pointerEvents = "auto";
+      panel.style.display = "none";
+      panel.style.boxSizing = "border-box";
+      panel.style.padding = "16px";
+      panel.style.border = "1px solid rgba(148, 163, 184, 0.45)";
+      panel.style.borderRadius = "10px";
+      panel.style.background = "rgba(2, 6, 23, 0.98)";
+      panel.style.color = "#e2e8f0";
+      panel.style.boxShadow = "0 16px 48px rgba(2, 6, 23, 0.55)";
+      panel.style.font = '12px/1.4 ui-monospace, "SFMono-Regular", Consolas, monospace';
+
+      const title = document.createElement("div");
+      title.setAttribute("data-role", "json-title");
+      title.textContent = "Public Snapshot JSON";
+      title.style.fontSize = "14px";
+      title.style.fontWeight = "600";
+      title.style.marginBottom = "8px";
+      panel.appendChild(title);
+
+      const statusLine = document.createElement("div");
+      statusLine.setAttribute("data-role", "json-status");
+      statusLine.style.marginBottom = "10px";
+      statusLine.style.color = "#93c5fd";
+      panel.appendChild(statusLine);
+
+      const textarea = document.createElement("textarea");
+      textarea.setAttribute("data-role", "json-textarea");
+      textarea.setAttribute("readonly", "readonly");
+      textarea.style.display = "block";
+      textarea.style.width = "100%";
+      textarea.style.height = "calc(100% - 88px)";
+      textarea.style.boxSizing = "border-box";
+      textarea.style.border = "1px solid rgba(148, 163, 184, 0.45)";
+      textarea.style.borderRadius = "8px";
+      textarea.style.background = "rgba(15, 23, 42, 0.98)";
+      textarea.style.color = "#f8fafc";
+      textarea.style.padding = "12px";
+      textarea.style.resize = "none";
+      textarea.style.font = "inherit";
+      textarea.style.pointerEvents = "auto";
+      panel.appendChild(textarea);
+
+      const buttonRow = document.createElement("div");
+      buttonRow.style.display = "flex";
+      buttonRow.style.gap = "8px";
+      buttonRow.style.marginTop = "10px";
+      panel.appendChild(buttonRow);
+
+      const selectButton = document.createElement("button");
+      selectButton.type = "button";
+      selectButton.setAttribute("data-select-json", "true");
+      selectButton.textContent = "Select JSON";
+      applyButtonStyles(selectButton);
+      selectButton.style.width = "auto";
+      selectButton.style.marginTop = "0";
+      buttonRow.appendChild(selectButton);
+
+      const closeButton = document.createElement("button");
+      closeButton.type = "button";
+      closeButton.setAttribute("data-close-json-panel", "true");
+      closeButton.textContent = "Close";
+      applyButtonStyles(closeButton);
+      closeButton.style.width = "auto";
+      closeButton.style.marginTop = "0";
+      buttonRow.appendChild(closeButton);
+
+      panel.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+
+        const button = target.closest(
+          'button[data-select-json], button[data-close-json-panel]'
+        );
+        if (!button || !panel.contains(button)) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (button.hasAttribute("data-close-json-panel")) {
+          closeJsonPanel();
+          return;
+        }
+
+        selectVisibleJson();
+      });
+
+      document.body.appendChild(panel);
+    }
+
+    const statusLine = panel.querySelector('[data-role="json-status"]');
+    const textarea = panel.querySelector('[data-role="json-textarea"]');
+    if (statusLine) {
+      statusLine.textContent = state.jsonPanelStatus;
+      statusLine.style.color = state.jsonPanelIsError ? "#fca5a5" : "#93c5fd";
+    }
+    if (textarea) {
+      textarea.value = state.jsonPanelText;
+    }
+
+    panel.style.display = state.jsonPanelVisible ? "block" : "none";
+    return panel;
+  }
+
+  function closeJsonPanel() {
+    state.jsonPanelVisible = false;
+    ensureJsonPanel();
+  }
+
+  function refreshPublicSnapshotPanel() {
+    if (!state.jsonPanelVisible || state.jsonPanelKind !== "public snapshot") {
       return;
     }
 
+    const text = getPublicSnapshotJson();
+    state.jsonPanelText = text;
+    state.jsonPanelStatus = text
+      ? "opened public snapshot JSON"
+      : "No public snapshot available yet";
+    state.jsonPanelIsError = !text;
+    ensureJsonPanel();
+  }
+
+  function showJsonPanel(kind, text, status, isError) {
     state.jsonPanelVisible = true;
     state.jsonPanelKind = kind;
-    panel.style.display = "block";
-    labelNode.textContent = `${kind} JSON`;
-    textarea.value = text;
-    textarea.focus();
-    textarea.select();
+    state.jsonPanelText = text;
+    state.jsonPanelStatus = status;
+    state.jsonPanelIsError = Boolean(isError);
+
+    const panel = ensureJsonPanel();
+    if (!panel) {
+      return;
+    }
+
+    const textarea = panel.querySelector('[data-role="json-textarea"]');
+    console.debug("[openfront-copilot-test] JSON panel opened", kind);
+    console.debug("[openfront-copilot-test] JSON length", text.length);
+    if (textarea) {
+      textarea.focus();
+      textarea.select();
+    }
   }
 
   function selectVisibleJson() {
-    const overlay = ensureOverlay();
-    if (!overlay) {
+    const panel = ensureJsonPanel();
+    if (!panel) {
       return;
     }
 
-    const textarea = overlay.querySelector('[data-role="json-textarea"]');
+    const textarea = panel.querySelector('[data-role="json-textarea"]');
     if (!textarea) {
       return;
     }
@@ -278,8 +425,13 @@
   }
 
   async function copyJsonText(text, label) {
-    showJsonPanel(label, text);
-    setOverlayStatus(`showing ${label} JSON`);
+    const panelStatus = text
+      ? `opened ${label} JSON`
+      : label === "public snapshot"
+        ? "No public snapshot available yet"
+        : `opened ${label} JSON`;
+    showJsonPanel(label, text, panelStatus, !text && label === "public snapshot");
+    setOverlayStatus(`opened ${label} JSON`);
 
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
       try {
@@ -315,26 +467,6 @@
     ensureOverlay();
   }
 
-  function shouldHandleButtonAction(button) {
-    const kind =
-      button.getAttribute("data-copy-kind") ||
-      button.getAttribute("data-show-kind") ||
-      button.getAttribute("data-select-json") ||
-      "unknown";
-    const signature = `${kind}:${button.textContent || ""}`;
-    if (state.lastHandledButtonSignature === signature) {
-      return false;
-    }
-
-    state.lastHandledButtonSignature = signature;
-    window.setTimeout(() => {
-      if (state.lastHandledButtonSignature === signature) {
-        state.lastHandledButtonSignature = null;
-      }
-    }, 0);
-    return true;
-  }
-
   async function handleOverlayButtonAction(button) {
     if (button.hasAttribute("data-select-json")) {
       selectVisibleJson();
@@ -349,8 +481,13 @@
 
     const showKind = button.getAttribute("data-show-kind");
     if (showKind) {
-      showJsonPanel(showKind, getJsonByKind(showKind));
-      setOverlayStatus(`showing ${showKind} JSON`);
+      const text = getJsonByKind(showKind);
+      const status =
+        showKind === "public snapshot" && !text
+          ? "No public snapshot available yet"
+          : `opened ${showKind} JSON`;
+      showJsonPanel(showKind, text, status, showKind === "public snapshot" && !text);
+      setOverlayStatus(`opened ${showKind} JSON`);
     }
   }
 
@@ -376,6 +513,7 @@
       button.getAttribute("data-copy-kind") ||
       button.getAttribute("data-show-kind") ||
       "select JSON";
+    console.debug("[openfront-copilot-test] button kind resolved", kind);
 
     event.preventDefault();
     event.stopPropagation();
@@ -385,8 +523,7 @@
 
     updateButtonDebug(kind, event.type);
     setOverlayStatus(`button pressed: ${kind}`);
-
-    if (!shouldHandleButtonAction(button)) {
+    if (event.type !== "click") {
       return;
     }
 
@@ -488,38 +625,6 @@
       applyButtonStyles(showPublicJsonButton);
       overlay.appendChild(showPublicJsonButton);
 
-      const jsonPanel = document.createElement("div");
-      jsonPanel.setAttribute("data-role", "json-panel");
-      jsonPanel.style.display = "none";
-      jsonPanel.style.marginTop = "6px";
-      jsonPanel.style.pointerEvents = "auto";
-      overlay.appendChild(jsonPanel);
-
-      const jsonLabel = document.createElement("div");
-      jsonLabel.setAttribute("data-role", "json-label");
-      jsonLabel.style.marginBottom = "4px";
-      jsonPanel.appendChild(jsonLabel);
-
-      const jsonTextarea = document.createElement("textarea");
-      jsonTextarea.setAttribute("data-role", "json-textarea");
-      jsonTextarea.setAttribute("readonly", "readonly");
-      jsonTextarea.style.width = "100%";
-      jsonTextarea.style.minHeight = "120px";
-      jsonTextarea.style.boxSizing = "border-box";
-      jsonTextarea.style.border = "1px solid rgba(148, 163, 184, 0.5)";
-      jsonTextarea.style.borderRadius = "6px";
-      jsonTextarea.style.background = "rgba(2, 6, 23, 0.9)";
-      jsonTextarea.style.color = "#f8fafc";
-      jsonTextarea.style.font = "inherit";
-      jsonTextarea.style.pointerEvents = "auto";
-      jsonPanel.appendChild(jsonTextarea);
-
-      const selectJsonButton = document.createElement("button");
-      selectJsonButton.type = "button";
-      selectJsonButton.setAttribute("data-select-json", "true");
-      selectJsonButton.textContent = "select JSON";
-      applyButtonStyles(selectJsonButton);
-      jsonPanel.appendChild(selectJsonButton);
     }
 
     const lines = overlay.querySelector('[data-role="lines"]');
@@ -530,19 +635,6 @@
     const statusLine = overlay.querySelector('[data-role="status"]');
     if (statusLine) {
       statusLine.textContent = state.overlayStatus;
-    }
-
-    const jsonPanel = overlay.querySelector('[data-role="json-panel"]');
-    const jsonLabel = overlay.querySelector('[data-role="json-label"]');
-    const jsonTextarea = overlay.querySelector('[data-role="json-textarea"]');
-    if (jsonPanel) {
-      jsonPanel.style.display = state.jsonPanelVisible ? "block" : "none";
-    }
-    if (jsonLabel) {
-      jsonLabel.textContent = state.jsonPanelKind ? `${state.jsonPanelKind} JSON` : "";
-    }
-    if (jsonTextarea && state.jsonPanelVisible && state.jsonPanelKind) {
-      jsonTextarea.value = getJsonByKind(state.jsonPanelKind);
     }
 
     return overlay;
@@ -601,6 +693,7 @@
     state.runtimeSource = data.runtimeSource || null;
     state.latestDiscovery = data.discovery || null;
     state.latestContextSummary = data.contextSummary || null;
+    refreshPublicSnapshotPanel();
     renderOverlay();
   });
 
