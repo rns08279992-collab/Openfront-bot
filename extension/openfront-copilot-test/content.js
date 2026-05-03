@@ -37,7 +37,12 @@
     latestDiscovery: null,
     latestContextSummary: null,
     overlayStatus: "status: ready",
-    publicSnapshotVisible: false
+    jsonPanelVisible: false,
+    jsonPanelKind: null,
+    buttonEvents: 0,
+    lastButtonKind: "none",
+    lastButtonEventType: "none",
+    lastHandledButtonSignature: null
   };
 
   function formatCountPair(aliveCount, totalCount) {
@@ -128,6 +133,9 @@
       `path: ${pageState.pathname || window.location.pathname}`,
       `host: ${state.activationHost}`,
       `runtime source: ${state.runtimeSource || "none"}`,
+      `buttonEvents: ${state.buttonEvents}`,
+      `lastButtonKind: ${state.lastButtonKind}`,
+      `lastButtonEventType: ${state.lastButtonEventType}`,
       "mode: read-only",
       "no actions enabled"
     ];
@@ -144,18 +152,8 @@
     );
   }
 
-  function copyDiscoveryJson() {
-    const discoveryJson = getDiscoveryJson();
-    copyJsonText(discoveryJson, "discovery JSON");
-  }
-
   function getPublicSnapshotJson() {
     return JSON.stringify(state.latestContextSummary || {}, null, 2);
-  }
-
-  function copyPublicSnapshotJson() {
-    const contextJson = getPublicSnapshotJson();
-    copyJsonText(contextJson, "public snapshot JSON");
   }
 
   function getDomProbeJson() {
@@ -164,11 +162,6 @@
         ? state.latestDiscovery.domProbe
         : {};
     return JSON.stringify(domProbe, null, 2);
-  }
-
-  function copyDomProbeJson() {
-    const domProbeJson = getDomProbeJson();
-    copyJsonText(domProbeJson, "DOM probe JSON");
   }
 
   function setOverlayStatus(message) {
@@ -197,85 +190,58 @@
     return source.trim().replace(/\s+/g, " ").slice(0, 80) || "unknown error";
   }
 
-  function showManualCopyPanel(label, text) {
+  function getJsonByKind(kind) {
+    if (kind === "discovery") {
+      return getDiscoveryJson();
+    }
+
+    if (kind === "public snapshot") {
+      return getPublicSnapshotJson();
+    }
+
+    if (kind === "DOM probe") {
+      return getDomProbeJson();
+    }
+
+    return JSON.stringify({}, null, 2);
+  }
+
+  function showJsonPanel(kind, text) {
     const overlay = ensureOverlay();
     if (!overlay) {
       return;
     }
 
-    const labelNode = overlay.querySelector('[data-role="manual-label"]');
-    const textarea = overlay.querySelector('[data-role="manual-json"]');
-    if (!labelNode || !textarea) {
+    const panel = overlay.querySelector('[data-role="json-panel"]');
+    const labelNode = overlay.querySelector('[data-role="json-label"]');
+    const textarea = overlay.querySelector('[data-role="json-textarea"]');
+    if (!panel || !labelNode || !textarea) {
       return;
     }
 
-    labelNode.textContent = `manual copy: ${label}`;
+    state.jsonPanelVisible = true;
+    state.jsonPanelKind = kind;
+    panel.style.display = "block";
+    labelNode.textContent = `${kind} JSON`;
     textarea.value = text;
-    textarea.style.display = "block";
     textarea.focus();
     textarea.select();
   }
 
-  function hideManualCopyPanel() {
-    const overlay = document.getElementById(OVERLAY_ID);
-    if (!overlay) {
-      return;
-    }
-
-    const textarea = overlay.querySelector('[data-role="manual-json"]');
-    const labelNode = overlay.querySelector('[data-role="manual-label"]');
-    if (textarea) {
-      textarea.style.display = "none";
-      textarea.value = "";
-    }
-    if (labelNode) {
-      labelNode.textContent = "";
-    }
-  }
-
-  function showPublicSnapshotPanel() {
+  function selectVisibleJson() {
     const overlay = ensureOverlay();
     if (!overlay) {
       return;
     }
 
-    const panel = overlay.querySelector('[data-role="public-json-panel"]');
-    const textarea = overlay.querySelector('[data-role="public-json"]');
-    const button = overlay.querySelector('[data-role="toggle-public-json"]');
-    if (!panel || !textarea || !button) {
+    const textarea = overlay.querySelector('[data-role="json-textarea"]');
+    if (!textarea) {
       return;
     }
 
-    state.publicSnapshotVisible = true;
-    panel.style.display = "block";
-    textarea.value = getPublicSnapshotJson();
-    button.textContent = "hide public snapshot JSON";
-  }
-
-  function hidePublicSnapshotPanel() {
-    const overlay = document.getElementById(OVERLAY_ID);
-    if (!overlay) {
-      return;
-    }
-
-    const panel = overlay.querySelector('[data-role="public-json-panel"]');
-    const button = overlay.querySelector('[data-role="toggle-public-json"]');
-    if (!panel || !button) {
-      return;
-    }
-
-    state.publicSnapshotVisible = false;
-    panel.style.display = "none";
-    button.textContent = "show public snapshot JSON";
-  }
-
-  function togglePublicSnapshotPanel() {
-    if (state.publicSnapshotVisible) {
-      hidePublicSnapshotPanel();
-      return;
-    }
-
-    showPublicSnapshotPanel();
+    textarea.focus();
+    textarea.select();
+    setOverlayStatus("selected JSON");
   }
 
   function copyWithExecCommand(text) {
@@ -312,21 +278,21 @@
   }
 
   async function copyJsonText(text, label) {
-    hideManualCopyPanel();
+    showJsonPanel(label, text);
+    setOverlayStatus(`showing ${label} JSON`);
 
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
       try {
         await navigator.clipboard.writeText(text);
-        setOverlayStatus(`copied ${label}`);
+        setOverlayStatus(`copied ${label} JSON`);
         return;
       } catch (clipboardError) {
         try {
           await copyWithExecCommand(text);
-          setOverlayStatus(`copied ${label}`);
+          setOverlayStatus(`copied ${label} JSON`);
           return;
         } catch (fallbackError) {
           const shortError = getShortErrorMessage(fallbackError || clipboardError);
-          showManualCopyPanel(label, text);
           setOverlayStatus(`copy failed: ${shortError}`);
           return;
         }
@@ -335,12 +301,96 @@
 
     try {
       await copyWithExecCommand(text);
-      setOverlayStatus(`copied ${label}`);
+      setOverlayStatus(`copied ${label} JSON`);
     } catch (error) {
       const shortError = getShortErrorMessage(error);
-      showManualCopyPanel(label, text);
       setOverlayStatus(`copy failed: ${shortError}`);
     }
+  }
+
+  function updateButtonDebug(kind, eventType) {
+    state.buttonEvents += 1;
+    state.lastButtonKind = kind;
+    state.lastButtonEventType = eventType;
+    ensureOverlay();
+  }
+
+  function shouldHandleButtonAction(button) {
+    const kind =
+      button.getAttribute("data-copy-kind") ||
+      button.getAttribute("data-show-kind") ||
+      button.getAttribute("data-select-json") ||
+      "unknown";
+    const signature = `${kind}:${button.textContent || ""}`;
+    if (state.lastHandledButtonSignature === signature) {
+      return false;
+    }
+
+    state.lastHandledButtonSignature = signature;
+    window.setTimeout(() => {
+      if (state.lastHandledButtonSignature === signature) {
+        state.lastHandledButtonSignature = null;
+      }
+    }, 0);
+    return true;
+  }
+
+  async function handleOverlayButtonAction(button) {
+    if (button.hasAttribute("data-select-json")) {
+      selectVisibleJson();
+      return;
+    }
+
+    const copyKind = button.getAttribute("data-copy-kind");
+    if (copyKind) {
+      await copyJsonText(getJsonByKind(copyKind), copyKind);
+      return;
+    }
+
+    const showKind = button.getAttribute("data-show-kind");
+    if (showKind) {
+      showJsonPanel(showKind, getJsonByKind(showKind));
+      setOverlayStatus(`showing ${showKind} JSON`);
+    }
+  }
+
+  function handleOverlayButtonEvent(event) {
+    const overlay = document.getElementById(OVERLAY_ID);
+    if (!overlay) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const button = target.closest(
+      'button[data-copy-kind], button[data-show-kind], button[data-select-json]'
+    );
+    if (!button || !overlay.contains(button)) {
+      return;
+    }
+
+    const kind =
+      button.getAttribute("data-copy-kind") ||
+      button.getAttribute("data-show-kind") ||
+      "select JSON";
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+
+    updateButtonDebug(kind, event.type);
+    setOverlayStatus(`button pressed: ${kind}`);
+
+    if (!shouldHandleButtonAction(button)) {
+      return;
+    }
+
+    void handleOverlayButtonAction(button);
   }
 
   function applyButtonStyles(button) {
@@ -383,6 +433,9 @@
       overlay.style.pointerEvents = "auto";
       overlay.style.minWidth = "220px";
       overlay.style.maxWidth = "320px";
+      overlay.addEventListener("pointerdown", handleOverlayButtonEvent);
+      overlay.addEventListener("mousedown", handleOverlayButtonEvent);
+      overlay.addEventListener("click", handleOverlayButtonEvent);
       document.body.appendChild(overlay);
 
       const title = document.createElement("div");
@@ -408,96 +461,65 @@
 
       const copyButton = document.createElement("button");
       copyButton.type = "button";
+      copyButton.setAttribute("data-copy-kind", "discovery");
       copyButton.textContent = "copy discovery JSON";
       applyButtonStyles(copyButton);
       copyButton.style.marginTop = "8px";
-      copyButton.addEventListener("click", function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        copyDiscoveryJson();
-      });
       overlay.appendChild(copyButton);
 
       const copyPublicSnapshotButton = document.createElement("button");
       copyPublicSnapshotButton.type = "button";
+      copyPublicSnapshotButton.setAttribute("data-copy-kind", "public snapshot");
       copyPublicSnapshotButton.textContent = "copy public snapshot JSON";
       applyButtonStyles(copyPublicSnapshotButton);
-      copyPublicSnapshotButton.addEventListener("click", function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        copyPublicSnapshotJson();
-      });
       overlay.appendChild(copyPublicSnapshotButton);
 
       const copyDomProbeButton = document.createElement("button");
       copyDomProbeButton.type = "button";
+      copyDomProbeButton.setAttribute("data-copy-kind", "DOM probe");
       copyDomProbeButton.textContent = "copy DOM probe JSON";
       applyButtonStyles(copyDomProbeButton);
-      copyDomProbeButton.addEventListener("click", function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        copyDomProbeJson();
-      });
       overlay.appendChild(copyDomProbeButton);
 
       const showPublicJsonButton = document.createElement("button");
       showPublicJsonButton.type = "button";
-      showPublicJsonButton.setAttribute("data-role", "toggle-public-json");
+      showPublicJsonButton.setAttribute("data-show-kind", "public snapshot");
       showPublicJsonButton.textContent = "show public snapshot JSON";
       applyButtonStyles(showPublicJsonButton);
-      showPublicJsonButton.addEventListener("click", function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        togglePublicSnapshotPanel();
-      });
       overlay.appendChild(showPublicJsonButton);
 
-      const publicJsonPanel = document.createElement("div");
-      publicJsonPanel.setAttribute("data-role", "public-json-panel");
-      publicJsonPanel.style.display = "none";
-      publicJsonPanel.style.marginTop = "6px";
-      overlay.appendChild(publicJsonPanel);
+      const jsonPanel = document.createElement("div");
+      jsonPanel.setAttribute("data-role", "json-panel");
+      jsonPanel.style.display = "none";
+      jsonPanel.style.marginTop = "6px";
+      jsonPanel.style.pointerEvents = "auto";
+      overlay.appendChild(jsonPanel);
 
-      const publicJsonLabel = document.createElement("div");
-      publicJsonLabel.textContent = "public snapshot JSON";
-      publicJsonLabel.style.marginBottom = "4px";
-      publicJsonPanel.appendChild(publicJsonLabel);
+      const jsonLabel = document.createElement("div");
+      jsonLabel.setAttribute("data-role", "json-label");
+      jsonLabel.style.marginBottom = "4px";
+      jsonPanel.appendChild(jsonLabel);
 
-      const publicJsonTextarea = document.createElement("textarea");
-      publicJsonTextarea.setAttribute("data-role", "public-json");
-      publicJsonTextarea.setAttribute("readonly", "readonly");
-      publicJsonTextarea.style.width = "100%";
-      publicJsonTextarea.style.minHeight = "120px";
-      publicJsonTextarea.style.boxSizing = "border-box";
-      publicJsonTextarea.style.border = "1px solid rgba(148, 163, 184, 0.5)";
-      publicJsonTextarea.style.borderRadius = "6px";
-      publicJsonTextarea.style.background = "rgba(2, 6, 23, 0.9)";
-      publicJsonTextarea.style.color = "#f8fafc";
-      publicJsonTextarea.style.font = "inherit";
-      publicJsonTextarea.style.pointerEvents = "auto";
-      publicJsonPanel.appendChild(publicJsonTextarea);
+      const jsonTextarea = document.createElement("textarea");
+      jsonTextarea.setAttribute("data-role", "json-textarea");
+      jsonTextarea.setAttribute("readonly", "readonly");
+      jsonTextarea.style.width = "100%";
+      jsonTextarea.style.minHeight = "120px";
+      jsonTextarea.style.boxSizing = "border-box";
+      jsonTextarea.style.border = "1px solid rgba(148, 163, 184, 0.5)";
+      jsonTextarea.style.borderRadius = "6px";
+      jsonTextarea.style.background = "rgba(2, 6, 23, 0.9)";
+      jsonTextarea.style.color = "#f8fafc";
+      jsonTextarea.style.font = "inherit";
+      jsonTextarea.style.pointerEvents = "auto";
+      jsonPanel.appendChild(jsonTextarea);
 
-      const manualLabel = document.createElement("div");
-      manualLabel.setAttribute("data-role", "manual-label");
-      manualLabel.style.marginTop = "6px";
-      manualLabel.style.marginBottom = "4px";
-      manualLabel.style.color = "#fecaca";
-      overlay.appendChild(manualLabel);
-
-      const manualTextarea = document.createElement("textarea");
-      manualTextarea.setAttribute("data-role", "manual-json");
-      manualTextarea.setAttribute("readonly", "readonly");
-      manualTextarea.style.display = "none";
-      manualTextarea.style.width = "100%";
-      manualTextarea.style.minHeight = "120px";
-      manualTextarea.style.boxSizing = "border-box";
-      manualTextarea.style.border = "1px solid rgba(248, 113, 113, 0.55)";
-      manualTextarea.style.borderRadius = "6px";
-      manualTextarea.style.background = "rgba(2, 6, 23, 0.9)";
-      manualTextarea.style.color = "#f8fafc";
-      manualTextarea.style.font = "inherit";
-      manualTextarea.style.pointerEvents = "auto";
-      overlay.appendChild(manualTextarea);
+      const selectJsonButton = document.createElement("button");
+      selectJsonButton.type = "button";
+      selectJsonButton.setAttribute("data-select-json", "true");
+      selectJsonButton.textContent = "select JSON";
+      applyButtonStyles(selectJsonButton);
+      jsonPanel.appendChild(selectJsonButton);
     }
 
     const lines = overlay.querySelector('[data-role="lines"]');
@@ -510,9 +532,17 @@
       statusLine.textContent = state.overlayStatus;
     }
 
-    const publicJsonTextarea = overlay.querySelector('[data-role="public-json"]');
-    if (publicJsonTextarea && state.publicSnapshotVisible) {
-      publicJsonTextarea.value = getPublicSnapshotJson();
+    const jsonPanel = overlay.querySelector('[data-role="json-panel"]');
+    const jsonLabel = overlay.querySelector('[data-role="json-label"]');
+    const jsonTextarea = overlay.querySelector('[data-role="json-textarea"]');
+    if (jsonPanel) {
+      jsonPanel.style.display = state.jsonPanelVisible ? "block" : "none";
+    }
+    if (jsonLabel) {
+      jsonLabel.textContent = state.jsonPanelKind ? `${state.jsonPanelKind} JSON` : "";
+    }
+    if (jsonTextarea && state.jsonPanelVisible && state.jsonPanelKind) {
+      jsonTextarea.value = getJsonByKind(state.jsonPanelKind);
     }
 
     return overlay;
